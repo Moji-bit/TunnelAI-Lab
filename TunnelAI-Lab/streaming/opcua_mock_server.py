@@ -7,7 +7,16 @@ from typing import Dict, Iterator, Optional
 
 from sim.traffic_model import TrafficParams, TrafficState, step_traffic
 from sim.emission_model import EmissionParams, EmissionState, step_emissions
-from sim.event_generator import Scenario, inflow, incident_flag, capacity_factor, controls
+from sim.event_generator import (
+    Scenario,
+    inflow,
+    incident_flag,
+    incident_type_code,
+    weather_flag,
+    weather_type_code,
+    capacity_factor,
+    controls,
+)
 
 import random
 
@@ -71,6 +80,26 @@ def add_noise(rng, x: float, sigma: float, lo: float | None = None, hi: float | 
         y = min(hi, y)
     return y
 
+
+def fan_stage_with_hysteresis(prev_stage: int, co_ppm: float, vis_pct: float) -> int:
+    stage = int(prev_stage)
+
+    up = [25.0, 40.0, 65.0]
+    down = [18.0, 32.0, 52.0]
+
+    # visibility contribution (low VIS => stronger ventilation)
+    if vis_pct < 65.0:
+        co_ppm += 18.0
+    elif vis_pct < 80.0:
+        co_ppm += 8.0
+
+    if stage < 3 and co_ppm >= up[stage]:
+        stage += 1
+    elif stage > 0 and co_ppm < down[stage - 1]:
+        stage -= 1
+
+    return max(0, min(3, stage))
+
 # -------------------------
 # Main generator
 # -------------------------
@@ -102,16 +131,38 @@ def generate_stream(
     # Base states
     traffic = TrafficState(rho_veh_per_km=25.0, v_kmh=95.0)
     emis = EmissionState(co_ppm=10.0, vis_proxy=0.02)
+    prev_inc = False
+    fan_stage_dyn = int(getattr(sc, "fan_stage", 0))
 
     for t_s in range(sc.duration_s):
+        # defensive init in case of external monkey-patching/refactors
+        if "fan_stage_dyn" not in locals():
+            fan_stage_dyn = int(getattr(sc, "fan_stage", 0))
         ts = t0 + timedelta(seconds=t_s)
 
         q_in_veh_per_h = float(inflow(sc, t_s))  # veh/h
         q_in_veh_per_min = q_in_veh_per_h / 60.0
 
         inc = bool(incident_flag(sc, t_s))
+        inc_type = int(incident_type_code(sc, t_s))
+        weather_active = bool(weather_flag(sc, t_s))
+        weather_type = int(weather_type_code(sc, t_s))
+
         cap = float(capacity_factor(sc, t_s))
-        vms_speed_kmh, fan_stage = controls(sc, t_s)
+        vms_speed_kmh_base, _fan_static = controls(sc, t_s)
+
+        # heavy ratio evolves slowly + incident specific modulation
+        heavy_ratio = 10.0 + 8.0 * max(0.0, min(1.0, traffic.rho_veh_per_km / 120.0))
+        if inc and sc.incident_type in {"wrong_way_driver", "stalled_vehicle", "vehicle_fire"}:
+            heavy_ratio += 4.0
+
+        # VMS gets additionally tightened under severe queueing
+        queue_penalty = 10.0 * getattr(traffic, "queue_index", 0.0)
+        vms_speed_kmh = max(40.0, vms_speed_kmh_base - queue_penalty)
+
+        # fan control with hysteresis on previous CO/VIS
+        vis_prev = vis_proxy_to_pct(float(emis.vis_proxy))
+        fan_stage_dyn = fan_stage_with_hysteresis(fan_stage_dyn, float(emis.co_ppm), vis_prev)
 
         traffic = step_traffic(traffic_p, traffic, q_in_veh_per_h, vms_speed_kmh, cap)
         emis = step_emissions(
@@ -119,11 +170,15 @@ def generate_stream(
             emis,
             traffic.rho_veh_per_km,
             traffic.v_kmh,
-            fan_stage,
+            fan_stage_dyn,
             int(inc),
+            incident_severity=float(getattr(sc, "incident_severity", 0.0)),
+            heavy_ratio_pct=heavy_ratio,
         )
 
         vis_pct = vis_proxy_to_pct(float(emis.vis_proxy))
+        if weather_active:
+            vis_pct = clamp(vis_pct - float(sc.weather_visibility_drop_pct), 0.0, 100.0)
         occ_pct = density_to_occ_pct(float(traffic.rho_veh_per_km))
 
         tags: Dict[str, float] = {}
@@ -135,6 +190,7 @@ def generate_stream(
         tags[f"Z1.TRAF.DET.{segment}.Flow"]  = add_noise(rng, q_in_veh_per_min, sigma=0.8, lo=0.0)
         tags[f"Z1.TRAF.DET.{segment}.Speed"] = add_noise(rng, float(traffic.v_kmh), sigma=1.5, lo=0.0, hi=140.0)
         tags[f"Z1.TRAF.DET.{segment}.Occ"]   = add_noise(rng, occ_pct, sigma=1.0, lo=0.0, hi=100.0)
+        tags[f"Z1.TRAF.DET.{segment}.HeavyRatio"] = add_noise(rng, heavy_ratio, sigma=0.6, lo=0.0, hi=100.0)
 
         # -------------------------
         # Zone 1 — environment sensors
@@ -146,8 +202,8 @@ def generate_stream(
         # -------------------------
         # Zone 1 — actuators (one fan + one VMS)
         # -------------------------
-        tags["Z1.VENT.FAN.F01.Stage"] = float(fan_stage)
-        tags["Z1.VENT.FAN.F01.State"] = float(1.0 if fan_stage > 0 else 0.0)
+        tags["Z1.VENT.FAN.F01.Stage"] = float(fan_stage_dyn)
+        tags["Z1.VENT.FAN.F01.State"] = float(1.0 if fan_stage_dyn > 0 else 0.0)
         tags["Z1.VENT.FAN.F01.Direction"] = 0.0  # placeholder enum
         tags["Z1.VENT.FAN.F01.Fault"] = 0.0      # placeholder
 
@@ -172,11 +228,21 @@ def generate_stream(
         # -------------------------
         # Zone 3 — minimal event labels (extend later)
         # -------------------------
+        onset = inc and (not prev_inc)
+        offset = (not inc) and prev_inc
+
         tags["Z3.EVT.Incident.Active"] = float(1.0 if inc else 0.0)
-        tags["Z3.EVT.Incident.Type"] = float(1.0 if inc else 0.0)  # placeholder enum
+        tags["Z3.EVT.Incident.Onset"] = float(1.0 if onset else 0.0)
+        tags["Z3.EVT.Incident.Offset"] = float(1.0 if offset else 0.0)
+        tags["Z3.EVT.Incident.Type"] = float(inc_type)
+        tags["Z3.EVT.Incident.Severity"] = float(sc.incident_severity if inc else 0.0)
         tags["Z3.EVT.Incident.LocationSegment"] = float(int(segment[1:])) if segment.startswith("S") else 1.0
+
+        tags["Z3.EVT.Weather.Active"] = float(1.0 if weather_active else 0.0)
+        tags["Z3.EVT.Weather.Type"] = float(weather_type)
 
         # -------------------------
         # Output snapshot
         # -------------------------
         yield TagSnapshot(timestamp=ts, tags=tags, quality="GOOD", scenario_id=sc.scenario_id)
+        prev_inc = inc
