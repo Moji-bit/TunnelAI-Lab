@@ -16,10 +16,11 @@ def parse_args() -> argparse.Namespace:
 
 def load_active_series(csv_path: Path) -> dict[str, list[tuple[datetime, int]]]:
     per_scenario: dict[str, dict[datetime, int]] = defaultdict(dict)
+    active_tags = {"Z3.EVT.Incident.Active", "Z2.EVENT.IncidentFlag"}
     with csv_path.open("r", encoding="utf-8", newline="") as f:
         r = csv.DictReader(f)
         for row in r:
-            if row.get("tag_id") != "Z3.EVT.Incident.Active":
+            if row.get("tag_id") not in active_tags:
                 continue
             sid = row.get("scenario_id", "scenario_0")
             ts = datetime.fromisoformat(row["timestamp"])
@@ -75,7 +76,7 @@ def main() -> None:
 
     data = load_active_series(csv_path)
     if not data:
-        raise SystemExit(f"No Z3.EVT.Incident.Active labels found in {csv_path}")
+        raise SystemExit(f"No incident-active labels found (Z3.EVT.Incident.Active / Z2.EVENT.IncidentFlag) in {csv_path}")
 
     print("# Label Quality Report")
     print(f"csv: {csv_path}")
