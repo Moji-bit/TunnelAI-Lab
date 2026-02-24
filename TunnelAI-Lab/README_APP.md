@@ -8,3 +8,10 @@
 conda env create -f environment.yml
 conda activate tunnelai
 streamlit run ui/dashboard.py
+```
+
+## Thesis Workflow
+- Experiment matrix: `thesis_experiment_matrix.md` / `thesis_experiment_matrix.csv`
+- Automation helper: `python scripts/run_experiment_matrix.py --mode plan`
+- Thesis DoD checklist: `THESIS_DEFINITION_OF_DONE.md`
+
