@@ -1,0 +1,397 @@
+# ui/dashboard.py
+from __future__ import annotations
+
+from streamlit_autorefresh import st_autorefresh
+
+import os
+from datetime import datetime
+from typing import List, Optional
+
+import pandas as pd
+import streamlit as st
+import yaml
+
+from streaming.run_record import load_scenario, record_to_csv
+
+
+# -------------------------
+# Paths / Constants
+# -------------------------
+SCENARIO_DIR = "scenarios"
+RAW_DIR = os.path.join("data", "raw")
+TAGS_YAML = os.path.join("tags", "tags.yaml")
+
+DEFAULT_START = "2026-01-01T08:00:00+01:00"
+DEFAULT_MAX_SECONDS = 300  # Quick demo; set None for full duration
+
+CRIT_WEIGHT = {"low": 1, "medium": 2, "high": 3, "critical": 4}
+
+
+# -------------------------
+# File utilities
+# -------------------------
+def list_json_files(folder: str) -> List[str]:
+    if not os.path.isdir(folder):
+        return []
+    files = [f for f in os.listdir(folder) if f.lower().endswith(".json")]
+    files.sort()
+    return files
+
+
+def list_csv_files(folder: str) -> List[str]:
+    if not os.path.isdir(folder):
+        return []
+    files = [f for f in os.listdir(folder) if f.lower().endswith(".csv")]
+    files.sort()
+    return files
+
+
+def make_out_csv_path(scenario_path: str, seed: int) -> str:
+    base = os.path.splitext(os.path.basename(scenario_path))[0]
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return os.path.join(RAW_DIR, f"{base}__seed{seed}__{ts}.csv")
+
+
+# -------------------------
+# Data handling: long -> wide
+# -------------------------
+def load_long_csv(path: str) -> pd.DataFrame:
+    df = pd.read_csv(path)
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    return df
+
+
+def long_to_wide(df_long: pd.DataFrame) -> pd.DataFrame:
+    wide = df_long.pivot_table(
+        index="timestamp",
+        columns="tag_id",
+        values="value",
+        aggfunc="mean",
+    ).sort_index()
+    wide.columns = [str(c) for c in wide.columns]
+    return wide
+
+
+# -------------------------
+# Tags.yaml helpers
+# -------------------------
+def load_tags_yaml(path: str = TAGS_YAML) -> dict:
+    with open(path, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+
+def build_tag_index(cfg: dict) -> dict:
+    idx = {}
+    for t in cfg.get("tags", []):
+        idx[t["tag_id"]] = t
+    return idx
+
+
+def tag_label(tag_id: str, meta: dict) -> str:
+    unit = meta.get("unit")
+    parts = tag_id.split(".")
+    seg = next((p for p in parts if p.startswith("S") and len(p) == 3), "")
+    signal = parts[-1]
+    zone = f"Z{meta.get('zone')}" if meta.get("zone") else parts[0]
+    subsystem = meta.get("subsystem", parts[1] if len(parts) > 1 else "")
+    u = f" [{unit}]" if unit else ""
+    if seg:
+        return f"{zone} | {subsystem} | {seg} | {signal}{u}"
+    return f"{zone} | {subsystem} | {signal}{u}"
+
+
+def limit_status(value: float, meta: dict) -> str:
+    limits = meta.get("limits")
+    if not limits:
+        return "⚪️"
+
+    vmin = limits.get("min", None)
+    vmax = limits.get("max", None)
+
+    if (vmin is not None and value < vmin) or (vmax is not None and value > vmax):
+        return "🔴"
+
+    band = 0.10
+    if vmin is not None and vmax is not None and vmax > vmin:
+        span = vmax - vmin
+        if value < vmin + band * span or value > vmax - band * span:
+            return "🟡"
+
+    return "🟢"
+
+
+# -------------------------
+# Streamlit UI
+# -------------------------
+st.set_page_config(page_title="TunnelAI-Lab – App", layout="wide")
+st.title("🚇 TunnelAI-Lab – App (Szenario-Runner + Playback)")
+
+with st.sidebar:
+    st.header("⚙️ Szenario ausführen")
+
+    scenarios = list_json_files(SCENARIO_DIR)
+    if not scenarios:
+        st.error(f"Keine Szenario-JSONs gefunden in: {SCENARIO_DIR}")
+        st.stop()
+
+    selected_scn = st.selectbox("Szenario wählen", scenarios, index=0)
+    scenario_path = os.path.join(SCENARIO_DIR, selected_scn)
+
+    start_time = st.text_input("Startzeit (ISO8601)", value=DEFAULT_START)
+    max_seconds = st.number_input(
+        "Max seconds (Playback-Länge)",
+        min_value=10,
+        max_value=24 * 3600,
+        value=DEFAULT_MAX_SECONDS,
+        step=10,
+        help="Für schnelle Tests. Für volle Länge später auf None/leer umstellen.",
+    )
+    seed = st.number_input(
+        "Seed (Reproduzierbarkeit)",
+        min_value=0,
+        max_value=10_000_000,
+        value=42,
+        step=1,
+        help="Gleicher Seed => gleiche CSV. Anderer Seed => neue, aber reproduzierbare Variante.",
+    )
+    
+    run_btn = st.button("▶️ Run Scenario → CSV erzeugen", use_container_width=True)
+
+    st.markdown("---")
+    st.header("📂 Playback")
+
+    csv_files = list_csv_files(RAW_DIR)
+    selected_csv = st.selectbox(
+        "CSV wählen (data/raw)",
+        csv_files,
+        index=max(0, len(csv_files) - 1) if csv_files else 0,
+        disabled=(len(csv_files) == 0),
+    )
+
+    play_speed = st.slider("Playback Speed", 1, 50, 10, 1)
+    window = st.slider("Chart-Fenster (letzte N Samples)", 50, 2000, 400, 50)
+
+    c1, c2, c3 = st.columns(3)
+    start_play = c1.button("▶️ Start")
+    pause_play = c2.button("⏸️ Pause")
+    reset_play = c3.button("🔄 Reset")
+
+
+# -------------------------
+# Session state init
+# -------------------------
+st.session_state.setdefault("playing", False)
+st.session_state.setdefault("i", 0)
+st.session_state.setdefault("last_csv_path", None)
+st.session_state.setdefault("wide", None)
+st.session_state.setdefault("long", None)
+
+
+# -------------------------
+# Run scenario -> create CSV
+# -------------------------
+if run_btn:
+    scn = load_scenario(scenario_path)
+    setattr(scn, "seed", int(seed))
+    out_csv = make_out_csv_path(scenario_path, int(seed))
+
+    out_csv = record_to_csv(
+        scenario=scn,
+        out_csv=out_csv,
+        start_time_iso=start_time,
+        max_seconds=int(max_seconds) if max_seconds else None,
+    )
+
+    st.success(f"✅ CSV erzeugt: {out_csv}")
+    st.session_state.last_csv_path = None
+    st.session_state.i = 0
+
+
+# -------------------------
+# Load selected CSV (long->wide)
+# -------------------------
+if selected_csv:
+    csv_path = os.path.join(RAW_DIR, selected_csv)
+
+    if st.session_state.last_csv_path != csv_path:
+        df_long = load_long_csv(csv_path)
+        df_wide = long_to_wide(df_long)
+
+        st.session_state.long = df_long
+        st.session_state.wide = df_wide
+        st.session_state.last_csv_path = csv_path
+        st.session_state.i = 0
+
+
+df_long: Optional[pd.DataFrame] = st.session_state.long
+df_wide: Optional[pd.DataFrame] = st.session_state.wide
+
+if df_wide is None or df_wide.empty:
+    st.info("Noch keine Daten geladen. Erzeuge ein Szenario oder wähle eine CSV.")
+    st.stop()
+
+
+# -------------------------
+# Tags.yaml -> Filter + Labels
+# -------------------------
+cfg = load_tags_yaml()
+tag_idx = build_tag_index(cfg)
+
+available_tags = [c for c in df_wide.columns if c in tag_idx]
+
+zones = sorted({tag_idx[t].get("zone") for t in available_tags})
+subs = sorted({tag_idx[t].get("subsystem") for t in available_tags})
+
+with st.sidebar:
+    st.markdown("---")
+    st.header("🧩 Tag-Filter (aus tags.yaml)")
+
+    zone_sel = st.multiselect("Zone", zones, default=zones)
+    subs_sel = st.multiselect("Subsystem", subs, default=subs)
+
+    segs = sorted({
+        p
+        for t in available_tags
+        for p in t.split(".")
+        if p.startswith("S") and len(p) == 3
+    })
+    
+    seg_sel = st.multiselect("Segment", segs, default=segs)
+
+    selected_tags = []
+    for t in available_tags:
+        m = tag_idx[t]
+        z_ok = m.get("zone") in zone_sel
+        s_ok = m.get("subsystem") in subs_sel
+        seg = next((p for p in t.split(".") if p.startswith("S") and len(p) == 3), None)
+        seg_ok = (seg in seg_sel) if seg else True
+        if z_ok and s_ok and seg_ok:
+            selected_tags.append(t)
+
+    label_map = {tag_label(t, tag_idx[t]): t for t in selected_tags}
+    shown = st.multiselect(
+        "Signals für Chart",
+        options=list(label_map.keys()),
+        default=list(label_map.keys())[:8],
+    )
+    chart_tags = [label_map[x] for x in shown]
+
+
+# -------------------------
+# Playback controls
+# -------------------------
+if start_play:
+    st.session_state.playing = True
+if pause_play:
+    st.session_state.playing = False
+if reset_play:
+    st.session_state.playing = False
+    st.session_state.i = 0
+
+
+# -------------------------
+# Main layout
+# -------------------------
+left, right = st.columns([2.2, 1])
+
+with left:
+    st.subheader("📈 Live Charts")
+    chart_area = st.empty()
+    table_area = st.empty()
+
+with right:
+    st.subheader("🧾 Status / Info")
+    status_area = st.empty()
+    tags_area = st.empty()
+    st.markdown("---")
+    st.write(f"CSV: `{os.path.basename(st.session_state.last_csv_path)}`")
+    st.write(f"Samples: {len(df_wide):,}")
+    st.write(f"Tags: {len(df_wide.columns):,}")
+
+
+def render_frame(i: int) -> None:
+    i = max(0, min(i, len(df_wide) - 1))
+    start_i = max(0, i - window)
+
+    view = df_wide.iloc[start_i : i + 1].copy()
+    current = df_wide.iloc[i, :]  # <- Series
+
+    # Chart (selected signals)
+    plot_df = view[chart_tags] if chart_tags else view.iloc[:, :8]
+    chart_area.line_chart(plot_df)
+
+    # Table
+    table_area.dataframe(view.tail(12), use_container_width=True)
+
+    # Status
+    ts = df_wide.index[i]
+    rows_now = df_long[df_long["timestamp"] == ts] if df_long is not None else pd.DataFrame()
+
+    scenario_id = rows_now["scenario_id"].iloc[0] if not rows_now.empty else "-"
+    quality = rows_now["quality"].iloc[0] if not rows_now.empty else "-"
+
+    status_area.markdown(
+        f"""
+        **Timestamp:** `{ts}`  
+        **Scenario:** `{scenario_id}`  
+        **Quality:** `{quality}`
+        """
+    )
+
+    # Top-Tags by (criticality + limit proximity)
+    rows = []
+    for t in plot_df.columns:  # nur die angezeigten Tags bewerten
+        meta = tag_idx.get(t)
+        if meta is None:
+            continue
+
+        val = current.get(t)
+        if pd.isna(val):
+            continue
+
+        v = float(val)
+        lamp = limit_status(v, meta)
+        crit = meta.get("criticality", "low")
+        w = CRIT_WEIGHT.get(crit, 1)
+
+        viol = 2 if lamp == "🔴" else (1 if lamp == "🟡" else 0)
+        score = w + viol
+
+        rows.append(
+            {
+                "score": score,
+                "lamp": lamp,
+                "tag": tag_label(t, meta),
+                "value": v,
+                "unit": meta.get("unit", ""),
+                "criticality": crit,
+            }
+        )
+
+    if rows:
+        top_df = pd.DataFrame(rows).sort_values("score", ascending=False).head(12)
+        tags_area.dataframe(
+            top_df[["lamp", "tag", "value", "unit", "criticality"]],
+            use_container_width=True,
+        )
+    else:
+        tags_area.info("Keine Tag-Metadaten/Values für Ranking verfügbar.")
+
+
+# -------------------------
+# Playback tick (MUSS vor render_frame kommen)
+# -------------------------
+if st.session_state.playing:
+    interval_ms = max(300, int(1000 / play_speed))  # min 300ms, sonst UI "friert" ein
+    tick = st_autorefresh(interval=interval_ms, key="player_refresh")
+
+    # nur wenn ein Tick passiert ist, Index erhöhen
+    if tick is not None:
+        if st.session_state.i < len(df_wide) - 1:
+            st.session_state.i += 1
+        else:
+            st.session_state.playing = False
+            st.success("Run fertig ✅")
+
+# JETZT erst rendern
+render_frame(st.session_state.i)
