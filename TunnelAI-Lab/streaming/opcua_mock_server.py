@@ -7,7 +7,16 @@ from typing import Dict, Iterator, Optional
 
 from sim.traffic_model import TrafficParams, TrafficState, step_traffic
 from sim.emission_model import EmissionParams, EmissionState, step_emissions
-from sim.event_generator import Scenario, inflow, incident_flag, capacity_factor, controls
+from sim.event_generator import (
+    Scenario,
+    inflow,
+    incident_flag,
+    incident_type_code,
+    weather_flag,
+    weather_type_code,
+    capacity_factor,
+    controls,
+)
 
 import random
 
@@ -102,6 +111,7 @@ def generate_stream(
     # Base states
     traffic = TrafficState(rho_veh_per_km=25.0, v_kmh=95.0)
     emis = EmissionState(co_ppm=10.0, vis_proxy=0.02)
+    prev_inc = False
 
     for t_s in range(sc.duration_s):
         ts = t0 + timedelta(seconds=t_s)
@@ -110,6 +120,10 @@ def generate_stream(
         q_in_veh_per_min = q_in_veh_per_h / 60.0
 
         inc = bool(incident_flag(sc, t_s))
+        inc_type = int(incident_type_code(sc, t_s))
+        weather_active = bool(weather_flag(sc, t_s))
+        weather_type = int(weather_type_code(sc, t_s))
+
         cap = float(capacity_factor(sc, t_s))
         vms_speed_kmh, fan_stage = controls(sc, t_s)
 
@@ -124,6 +138,8 @@ def generate_stream(
         )
 
         vis_pct = vis_proxy_to_pct(float(emis.vis_proxy))
+        if weather_active:
+            vis_pct = clamp(vis_pct - float(sc.weather_visibility_drop_pct), 0.0, 100.0)
         occ_pct = density_to_occ_pct(float(traffic.rho_veh_per_km))
 
         tags: Dict[str, float] = {}
@@ -172,11 +188,21 @@ def generate_stream(
         # -------------------------
         # Zone 3 — minimal event labels (extend later)
         # -------------------------
+        onset = inc and (not prev_inc)
+        offset = (not inc) and prev_inc
+
         tags["Z3.EVT.Incident.Active"] = float(1.0 if inc else 0.0)
-        tags["Z3.EVT.Incident.Type"] = float(1.0 if inc else 0.0)  # placeholder enum
+        tags["Z3.EVT.Incident.Onset"] = float(1.0 if onset else 0.0)
+        tags["Z3.EVT.Incident.Offset"] = float(1.0 if offset else 0.0)
+        tags["Z3.EVT.Incident.Type"] = float(inc_type)
+        tags["Z3.EVT.Incident.Severity"] = float(sc.incident_severity if inc else 0.0)
         tags["Z3.EVT.Incident.LocationSegment"] = float(int(segment[1:])) if segment.startswith("S") else 1.0
+
+        tags["Z3.EVT.Weather.Active"] = float(1.0 if weather_active else 0.0)
+        tags["Z3.EVT.Weather.Type"] = float(weather_type)
 
         # -------------------------
         # Output snapshot
         # -------------------------
         yield TagSnapshot(timestamp=ts, tags=tags, quality="GOOD", scenario_id=sc.scenario_id)
+        prev_inc = inc
