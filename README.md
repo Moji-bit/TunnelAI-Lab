@@ -1,14 +1,3 @@
-Mega gut 😎🔥 Jetzt wird dein **TunnelAI-Lab** offiziell wie ein echtes Forschungsframework aussehen.
-
-Ich schreibe dir ein **professionelles, forschungsorientiertes README.md**, passend zu deiner Architektur (sim/, streaming/, models/, constraint_layer/, evaluation/, ui/).
-
-Du kannst das 1:1 als `README.md` ins Root legen.
-
----
-
-# 📄 README.md (für dein Repo)
-
-```markdown
 # 🚧 TunnelAI-Lab  
 ### From Reactive to Predictive Tunnel Operations
 
@@ -212,25 +201,3 @@ MIT License (to be added)
 Mojtaba Akhundzadeh
 BSc AI & Machine Learning
 Predictive Tunnel Operations Research
-
-```
-
----
-
-# 🔥 Optional – Noch professioneller?
-
-Ich kann dir zusätzlich machen:
-
-- ✅ Ein wissenschaftliches „Research Abstract“ oben
-- ✅ Architekturdiagramm als PNG für README
-- ✅ Badges (Python, License, Status)
-- ✅ DOI-ready Struktur
-- ✅ Citation Block für Papers
-- ✅ „Getting Started in 60 seconds“ Section
-- ✅ Contribution Guidelines
-- ✅ GitHub Project Board Struktur
-
----
-
-Wenn du willst, mache ich dir jetzt eine **High-End wissenschaftliche Version**, die wie ein Horizon-Europe Projekt wirkt 😎
-```
