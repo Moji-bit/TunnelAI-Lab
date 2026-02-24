@@ -14,14 +14,7 @@ streamlit run ui/dashboard.py
 ```bash
 conda env create -f environment.lock.yml
 conda activate tunnelai
-bash scripts/verify_clean_machine.sh  # Linux/macOS
-```
-
-### Windows (cmd/Anaconda Prompt)
-```bat
-conda env create -f environment.lock.yml
-conda activate tunnelai
-scripts\verify_clean_machine.bat
+bash scripts/verify_clean_machine.sh
 ```
 
 ## Thesis Workflow
