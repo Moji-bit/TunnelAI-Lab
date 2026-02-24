@@ -111,6 +111,7 @@ def generate_stream(
     # Base states
     traffic = TrafficState(rho_veh_per_km=25.0, v_kmh=95.0)
     emis = EmissionState(co_ppm=10.0, vis_proxy=0.02)
+    prev_inc = False
 
     for t_s in range(sc.duration_s):
         ts = t0 + timedelta(seconds=t_s)
@@ -187,6 +188,9 @@ def generate_stream(
         # -------------------------
         # Zone 3 — minimal event labels (extend later)
         # -------------------------
+        onset = inc and (not prev_inc)
+        offset = (not inc) and prev_inc
+
         tags["Z3.EVT.Incident.Active"] = float(1.0 if inc else 0.0)
         tags["Z3.EVT.Incident.Type"] = float(inc_type)
         tags["Z3.EVT.Incident.Severity"] = float(sc.incident_severity if inc else 0.0)
@@ -199,3 +203,4 @@ def generate_stream(
         # Output snapshot
         # -------------------------
         yield TagSnapshot(timestamp=ts, tags=tags, quality="GOOD", scenario_id=sc.scenario_id)
+        prev_inc = inc
