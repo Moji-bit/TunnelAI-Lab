@@ -18,7 +18,7 @@ class DatasetConfig:
     # Tags
     feature_tags: List[str] = None
     forecast_targets: List[str] = None
-    event_tag: str = "Z2.EVENT.IncidentFlag"
+    event_tag: str = "Z3.EVT.Incident.Active"
 
     # Quality filter
     keep_quality: str = "GOOD"
