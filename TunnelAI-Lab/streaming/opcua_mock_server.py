@@ -134,6 +134,9 @@ def generate_stream(
     prev_inc = False
 
     for t_s in range(sc.duration_s):
+        # defensive init in case of external monkey-patching/refactors
+        if "fan_stage_dyn" not in locals():
+            fan_stage_dyn = int(getattr(sc, "fan_stage", 0))
         ts = t0 + timedelta(seconds=t_s)
 
         q_in_veh_per_h = float(inflow(sc, t_s))  # veh/h
