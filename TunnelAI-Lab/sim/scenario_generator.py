@@ -15,18 +15,32 @@ def generate_random_scenarios(
     os.makedirs(out_dir, exist_ok=True)
     rng = np.random.default_rng(seed)
 
+    incident_types = ["collision", "stalled_vehicle", "wrong_way_driver", "vehicle_fire"]
+    weather_types = ["clear", "rain", "fog", "snow"]
+
     scenarios = []
 
     for i in range(n):
+        duration_s = int(rng.integers(5400, 9000))
+        weather_start = int(rng.integers(600, max(1200, duration_s // 2)))
+        weather_end = int(min(duration_s - 1, weather_start + int(rng.integers(600, 2200))))
+
         sc = Scenario(
             scenario_id=f"stau_case_{i:02d}",
-            duration_s=int(rng.integers(5400, 9000)),  # 1.5h – 2.5h
+            duration_s=duration_s,  # 1.5h – 2.5h
             q_in_base_veh_per_h=float(rng.uniform(1800, 2600)),
             q_in_peak_amp_veh_per_h=float(rng.uniform(800, 1500)),
             q_in_peak_period_s=int(rng.integers(1200, 2400)),
             incident_start_s=int(rng.integers(1500, 4000)),
             incident_end_s=int(rng.integers(4000, 6000)),
-            incident_capacity_drop=float(rng.uniform(0.25, 0.55)),
+            incident_capacity_drop=float(rng.uniform(0.20, 0.60)),
+            incident_type=str(rng.choice(incident_types)),
+            incident_severity=float(rng.uniform(0.35, 0.95)),
+            weather_type=str(rng.choice(weather_types)),
+            weather_start_s=weather_start,
+            weather_end_s=weather_end,
+            weather_visibility_drop_pct=float(rng.uniform(0, 35)),
+            weather_speed_drop_kmh=float(rng.uniform(0, 25)),
             vms_speed_limit_kmh=int(rng.choice([80, 90])),
             fan_stage=int(rng.choice([1, 2, 3])),
         )

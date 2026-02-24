@@ -2,8 +2,8 @@
 import torch
 import torch.nn as nn
 
-from models.backbone.transformer import TransformerBackbone
-from models.backbone.lstm import LSTMBackbone
+from models.bachbone.transformer import TransformerBackbone
+from models.bachbone.lstm import LSTMBackbone
 from models.heads.forecasting import ForecastHead
 from models.heads.event import EventHead
 from models.heads.risk import RiskHead
