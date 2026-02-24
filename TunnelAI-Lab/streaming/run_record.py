@@ -4,12 +4,25 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from datetime import datetime
 from typing import List, Tuple
+
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+if __package__ is None or __package__ == "":
+    sys.path.insert(0, BASE_DIR)
 
 from streaming.opcua_mock_server import generate_stream
 from streaming.recorder import write_long_csv
 from sim.event_generator import Scenario
+
+
+def _resolve_path(path: str | None) -> str | None:
+    if path is None:
+        return None
+    if os.path.isabs(path):
+        return path
+    return os.path.join(BASE_DIR, path)
 
 
 def load_scenario(path: str | None) -> Scenario:
@@ -20,7 +33,8 @@ def load_scenario(path: str | None) -> Scenario:
     if path is None:
         return Scenario()
 
-    with open(path, "r", encoding="utf-8") as f:
+    resolved_path = _resolve_path(path)
+    with open(resolved_path, "r", encoding="utf-8") as f:
         d = json.load(f)
     return Scenario(**d)
 
@@ -50,9 +64,10 @@ def record_to_csv(
         if max_seconds is not None and n >= max_seconds:
             break
 
-    os.makedirs(os.path.dirname(out_csv) or ".", exist_ok=True)
-    write_long_csv(out_csv, rows)
-    return out_csv
+    resolved_out_csv = _resolve_path(out_csv) or out_csv
+    os.makedirs(os.path.dirname(resolved_out_csv) or ".", exist_ok=True)
+    write_long_csv(resolved_out_csv, rows)
+    return resolved_out_csv
 
 
 def main():
