@@ -132,7 +132,6 @@ def generate_stream(
     traffic = TrafficState(rho_veh_per_km=25.0, v_kmh=95.0)
     emis = EmissionState(co_ppm=10.0, vis_proxy=0.02)
     prev_inc = False
-    fan_stage_dyn = int(getattr(sc, "fan_stage", 0))
 
     for t_s in range(sc.duration_s):
         # defensive init in case of external monkey-patching/refactors
@@ -232,8 +231,6 @@ def generate_stream(
         offset = (not inc) and prev_inc
 
         tags["Z3.EVT.Incident.Active"] = float(1.0 if inc else 0.0)
-        tags["Z3.EVT.Incident.Onset"] = float(1.0 if onset else 0.0)
-        tags["Z3.EVT.Incident.Offset"] = float(1.0 if offset else 0.0)
         tags["Z3.EVT.Incident.Type"] = float(inc_type)
         tags["Z3.EVT.Incident.Severity"] = float(sc.incident_severity if inc else 0.0)
         tags["Z3.EVT.Incident.LocationSegment"] = float(int(segment[1:])) if segment.startswith("S") else 1.0
