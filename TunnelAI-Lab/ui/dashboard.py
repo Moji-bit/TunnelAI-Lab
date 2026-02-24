@@ -17,9 +17,10 @@ from streaming.run_record import load_scenario, record_to_csv
 # -------------------------
 # Paths / Constants
 # -------------------------
-SCENARIO_DIR = "scenarios"
-RAW_DIR = os.path.join("data", "raw")
-TAGS_YAML = os.path.join("tags", "tags.yaml")
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+SCENARIO_DIR = os.path.join(BASE_DIR, "scenarios")
+RAW_DIR = os.path.join(BASE_DIR, "data", "raw")
+TAGS_YAML = os.path.join(BASE_DIR, "tags", "tags.yaml")
 
 DEFAULT_START = "2026-01-01T08:00:00+01:00"
 DEFAULT_MAX_SECONDS = 300  # Quick demo; set None for full duration
@@ -131,7 +132,7 @@ with st.sidebar:
 
     scenarios = list_json_files(SCENARIO_DIR)
     if not scenarios:
-        st.error(f"Keine Szenario-JSONs gefunden in: {SCENARIO_DIR}")
+        st.error(f"Keine Szenario-JSONs gefunden in: {os.path.relpath(SCENARIO_DIR, BASE_DIR)}")
         st.stop()
 
     selected_scn = st.selectbox("Szenario wählen", scenarios, index=0)
