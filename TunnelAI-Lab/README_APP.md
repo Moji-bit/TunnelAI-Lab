@@ -14,14 +14,7 @@ streamlit run ui/dashboard.py
 ```bash
 conda env create -f environment.lock.yml
 conda activate tunnelai
-bash scripts/verify_clean_machine.sh  # Linux/macOS
-```
-
-### Windows (cmd/Anaconda Prompt)
-```bat
-conda env create -f environment.lock.yml
-conda activate tunnelai
-scripts\verify_clean_machine.bat
+bash scripts/verify_clean_machine.sh
 ```
 
 ## Thesis Workflow
@@ -67,13 +60,6 @@ run_reports_after_batch.bat
   - `.\scripts\run_reports_after_batch.bat`
   - `run_reports_after_batch.bat`
   - `python scripts\run_reports_after_batch.py`
-- If `dataset/merge_csv.py` fails with `numpy/pandas` DLL import errors, `run_reports_after_batch.py` now continues automatically and uses existing `data/raw/all_runs.csv`.
-- To repair a broken Windows `numpy/pandas` install in the active `tunnelai` env:
-```bat
-conda activate tunnelai
-pip uninstall -y pandas numpy
-conda install -y -c conda-forge --force-reinstall numpy pandas
-```
 - If you still see old errors (e.g. `fan_stage_dyn`), update local repo first:
 ```bat
 git pull

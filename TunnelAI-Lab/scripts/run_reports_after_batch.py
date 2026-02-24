@@ -15,14 +15,7 @@ def run(cmd: list[str]) -> None:
 
 def main() -> None:
     if importlib.util.find_spec('pandas'):
-        try:
-            run([sys.executable, 'dataset/merge_csv.py'])
-        except subprocess.CalledProcessError as exc:
-            print(
-                '[warn] merge_csv.py failed (likely broken pandas/numpy binary); '
-                'continuing with existing data/raw/all_runs.csv if present.'
-            )
-            print(f'[warn] merge_csv.py exit={exc.returncode}')
+        run([sys.executable, 'dataset/merge_csv.py'])
     else:
         print('[warn] pandas missing: skipping merge_csv.py, using existing data/raw/all_runs.csv if present.')
 
