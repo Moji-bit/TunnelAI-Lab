@@ -22,6 +22,3 @@ bash scripts/verify_clean_machine.sh
 - Automation helper: `python scripts/run_experiment_matrix.py --mode plan`
 - Thesis DoD checklist: `THESIS_DEFINITION_OF_DONE.md`
 
-
-- Label quality spec: `LABEL_QUALITY.md`
-- Label quality report: `python scripts/report_label_quality.py --csv data/raw/all_runs.csv --h 60`

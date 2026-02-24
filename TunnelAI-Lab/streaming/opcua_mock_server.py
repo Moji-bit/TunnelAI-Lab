@@ -192,8 +192,6 @@ def generate_stream(
         offset = (not inc) and prev_inc
 
         tags["Z3.EVT.Incident.Active"] = float(1.0 if inc else 0.0)
-        tags["Z3.EVT.Incident.Onset"] = float(1.0 if onset else 0.0)
-        tags["Z3.EVT.Incident.Offset"] = float(1.0 if offset else 0.0)
         tags["Z3.EVT.Incident.Type"] = float(inc_type)
         tags["Z3.EVT.Incident.Severity"] = float(sc.incident_severity if inc else 0.0)
         tags["Z3.EVT.Incident.LocationSegment"] = float(int(segment[1:])) if segment.startswith("S") else 1.0
