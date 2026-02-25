@@ -27,9 +27,9 @@ def load_series(csv_path: Path):
 
 
 def rule_score(x):
-    speed = x.get('Z2.TRAF.Speed', x.get('Z2.TRAF.AGG.S01.Speed_10s', 100.0))
-    density = x.get('Z2.TRAF.Density', x.get('Z2.TRAF.AGG.S01.Density_10s', 0.0))
-    co = x.get('Z2.CO.S01.Value', x.get('Z2.ENV.AGG.S01.CO_10s', 0.0))
+    speed = x.get('Z2.TRAF.AGG.S01.Speed_10s', x.get('Z2.TRAF.Speed', 100.0))
+    density = x.get('Z2.TRAF.AGG.S01.Density_10s', x.get('Z2.TRAF.Density', 0.0))
+    co = x.get('Z2.ENV.AGG.S01.CO_10s', x.get('Z2.CO.S01.Value', 0.0))
 
     score = 0.0
     score += max(0.0, min(1.0, (35.0 - float(speed)) / 35.0))
@@ -89,11 +89,17 @@ def with_noise(records, sigma_speed=3.0, sigma_density=5.0, sigma_co=8.0, seed=4
     out = []
     for x in records:
         y = dict(x)
-        if 'Z2.TRAF.Speed' in y:
+        if 'Z2.TRAF.AGG.S01.Speed_10s' in y:
+            y['Z2.TRAF.AGG.S01.Speed_10s'] = max(0.0, y['Z2.TRAF.AGG.S01.Speed_10s'] + rng.gauss(0.0, sigma_speed))
+        elif 'Z2.TRAF.Speed' in y:
             y['Z2.TRAF.Speed'] = max(0.0, y['Z2.TRAF.Speed'] + rng.gauss(0.0, sigma_speed))
-        if 'Z2.TRAF.Density' in y:
+        if 'Z2.TRAF.AGG.S01.Density_10s' in y:
+            y['Z2.TRAF.AGG.S01.Density_10s'] = max(0.0, y['Z2.TRAF.AGG.S01.Density_10s'] + rng.gauss(0.0, sigma_density))
+        elif 'Z2.TRAF.Density' in y:
             y['Z2.TRAF.Density'] = max(0.0, y['Z2.TRAF.Density'] + rng.gauss(0.0, sigma_density))
-        if 'Z2.CO.S01.Value' in y:
+        if 'Z2.ENV.AGG.S01.CO_10s' in y:
+            y['Z2.ENV.AGG.S01.CO_10s'] = max(0.0, y['Z2.ENV.AGG.S01.CO_10s'] + rng.gauss(0.0, sigma_co))
+        elif 'Z2.CO.S01.Value' in y:
             y['Z2.CO.S01.Value'] = max(0.0, y['Z2.CO.S01.Value'] + rng.gauss(0.0, sigma_co))
         out.append(y)
     return out
@@ -101,7 +107,7 @@ def with_noise(records, sigma_speed=3.0, sigma_density=5.0, sigma_co=8.0, seed=4
 
 def with_missing(records, p_drop=0.1, seed=42):
     rng = random.Random(seed)
-    keys = ['Z2.TRAF.Speed', 'Z2.TRAF.Density', 'Z2.CO.S01.Value']
+    keys = ['Z2.TRAF.AGG.S01.Speed_10s', 'Z2.TRAF.AGG.S01.Density_10s', 'Z2.ENV.AGG.S01.CO_10s', 'Z2.TRAF.Speed', 'Z2.TRAF.Density', 'Z2.CO.S01.Value']
     out = []
     for x in records:
         y = dict(x)
