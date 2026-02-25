@@ -16,6 +16,11 @@ import pandas as pd
 import streamlit as st
 import yaml
 
+# ensure repo root is importable when Streamlit launches from nested paths
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
 from streaming.run_record import load_scenario, record_to_csv
 
 
