@@ -1,9 +1,14 @@
 # ui/dashboard.py
 from __future__ import annotations
 
-from streamlit_autorefresh import st_autorefresh
-
 import os
+
+try:
+    from streamlit_autorefresh import st_autorefresh
+except ModuleNotFoundError:
+    def st_autorefresh(*_args, **_kwargs) -> int:
+        return 0
+
 from datetime import datetime
 from typing import List, Optional
 
@@ -17,9 +22,10 @@ from streaming.run_record import load_scenario, record_to_csv
 # -------------------------
 # Paths / Constants
 # -------------------------
-SCENARIO_DIR = "scenarios"
-RAW_DIR = os.path.join("data", "raw")
-TAGS_YAML = os.path.join("tags", "tags.yaml")
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+SCENARIO_DIR = os.path.join(BASE_DIR, "scenarios")
+RAW_DIR = os.path.join(BASE_DIR, "data", "raw")
+TAGS_YAML = os.path.join(BASE_DIR, "tags", "tags.yaml")
 
 DEFAULT_START = "2026-01-01T08:00:00+01:00"
 DEFAULT_MAX_SECONDS = 300  # Quick demo; set None for full duration
@@ -55,12 +61,14 @@ def make_out_csv_path(scenario_path: str, seed: int) -> str:
 # -------------------------
 # Data handling: long -> wide
 # -------------------------
+@st.cache_data(show_spinner=False)
 def load_long_csv(path: str) -> pd.DataFrame:
     df = pd.read_csv(path)
     df["timestamp"] = pd.to_datetime(df["timestamp"])
     return df
 
 
+@st.cache_data(show_spinner=False)
 def long_to_wide(df_long: pd.DataFrame) -> pd.DataFrame:
     wide = df_long.pivot_table(
         index="timestamp",
@@ -75,6 +83,7 @@ def long_to_wide(df_long: pd.DataFrame) -> pd.DataFrame:
 # -------------------------
 # Tags.yaml helpers
 # -------------------------
+@st.cache_data(show_spinner=False)
 def load_tags_yaml(path: str = TAGS_YAML) -> dict:
     with open(path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
@@ -131,7 +140,7 @@ with st.sidebar:
 
     scenarios = list_json_files(SCENARIO_DIR)
     if not scenarios:
-        st.error(f"Keine Szenario-JSONs gefunden in: {SCENARIO_DIR}")
+        st.error(f"Keine Szenario-JSONs gefunden in: {os.path.relpath(SCENARIO_DIR, BASE_DIR)}")
         st.stop()
 
     selected_scn = st.selectbox("Szenario wählen", scenarios, index=0)
@@ -168,7 +177,7 @@ with st.sidebar:
         disabled=(len(csv_files) == 0),
     )
 
-    play_speed = st.slider("Playback Speed", 1, 50, 10, 1)
+    play_speed = st.slider("Playback Speed", 1, 20, 6, 1)
     window = st.slider("Chart-Fenster (letzte N Samples)", 50, 2000, 400, 50)
 
     c1, c2, c3 = st.columns(3)
@@ -185,6 +194,7 @@ st.session_state.setdefault("i", 0)
 st.session_state.setdefault("last_csv_path", None)
 st.session_state.setdefault("wide", None)
 st.session_state.setdefault("long", None)
+st.session_state.setdefault("status_by_ts", None)
 
 
 # -------------------------
@@ -217,14 +227,22 @@ if selected_csv:
         df_long = load_long_csv(csv_path)
         df_wide = long_to_wide(df_long)
 
+        status_by_ts = (
+            df_long.sort_values("timestamp")
+            .drop_duplicates(subset=["timestamp"], keep="last")
+            .set_index("timestamp")[["scenario_id", "quality"]]
+        )
+
         st.session_state.long = df_long
         st.session_state.wide = df_wide
+        st.session_state.status_by_ts = status_by_ts
         st.session_state.last_csv_path = csv_path
         st.session_state.i = 0
 
 
 df_long: Optional[pd.DataFrame] = st.session_state.long
 df_wide: Optional[pd.DataFrame] = st.session_state.wide
+status_by_ts: Optional[pd.DataFrame] = st.session_state.status_by_ts
 
 if df_wide is None or df_wide.empty:
     st.info("Noch keine Daten geladen. Erzeuge ein Szenario oder wähle eine CSV.")
@@ -320,15 +338,18 @@ def render_frame(i: int) -> None:
     plot_df = view[chart_tags] if chart_tags else view.iloc[:, :8]
     chart_area.line_chart(plot_df)
 
-    # Table
-    table_area.dataframe(view.tail(12), use_container_width=True)
+    # Table (nur sichtbare/ausgewählte Spalten, um UI-Lag zu reduzieren)
+    table_cols = list(plot_df.columns)[: min(12, len(plot_df.columns))]
+    table_area.dataframe(view[table_cols].tail(12), use_container_width=True)
 
     # Status
     ts = df_wide.index[i]
-    rows_now = df_long[df_long["timestamp"] == ts] if df_long is not None else pd.DataFrame()
-
-    scenario_id = rows_now["scenario_id"].iloc[0] if not rows_now.empty else "-"
-    quality = rows_now["quality"].iloc[0] if not rows_now.empty else "-"
+    if status_by_ts is not None and ts in status_by_ts.index:
+        scenario_id = status_by_ts.at[ts, "scenario_id"]
+        quality = status_by_ts.at[ts, "quality"]
+    else:
+        scenario_id = "-"
+        quality = "-"
 
     status_area.markdown(
         f"""
@@ -382,7 +403,7 @@ def render_frame(i: int) -> None:
 # Playback tick (MUSS vor render_frame kommen)
 # -------------------------
 if st.session_state.playing:
-    interval_ms = max(300, int(1000 / play_speed))  # min 300ms, sonst UI "friert" ein
+    interval_ms = max(800, int(1000 / play_speed))  # langsameres Tick-Tempo reduziert Blinken/Frieren
     tick = st_autorefresh(interval=interval_ms, key="player_refresh")
 
     # nur wenn ein Tick passiert ist, Index erhöhen
