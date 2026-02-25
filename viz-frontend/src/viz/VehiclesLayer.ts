@@ -53,11 +53,10 @@ export class VehiclesLayer {
       color.set(vehicle.id === this.selectedVehicleId ? 0xffcf40 : 0xffffff);
       bundle.mesh.setColorAt(idx, color);
       bundle.indexToVehicleId.set(idx, vehicle.id);
+      bundle.mesh.count = counters[vehicle.type];
     });
 
-    Object.entries(this.meshes).forEach(([type, bundle]) => {
-      const activeCount = counters[type as VehicleState['type']];
-      bundle.mesh.count = activeCount;
+    Object.values(this.meshes).forEach((bundle) => {
       bundle.mesh.instanceMatrix.needsUpdate = true;
       if (bundle.mesh.instanceColor) {
         bundle.mesh.instanceColor.needsUpdate = true;
@@ -83,7 +82,6 @@ export class VehiclesLayer {
     const mesh = new THREE.InstancedMesh(geometry, material, MAX_INSTANCES);
     mesh.castShadow = false;
     mesh.receiveShadow = false;
-    mesh.frustumCulled = false;
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     return { mesh, indexToVehicleId: new Map() };
   }
