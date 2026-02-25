@@ -1,0 +1,105 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #0b1220;
+  color: #dce6ff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.app-layout {
+  display: grid;
+  grid-template-rows: auto auto auto 1fr;
+  height: 100vh;
+}
+
+.topbar,
+.playback-controls,
+.layer-toggles {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.65rem 1rem;
+  background: #111a2d;
+  border-bottom: 1px solid #1f2942;
+}
+
+.topbar select,
+.playback-controls select,
+button {
+  background: #1d2740;
+  color: #dce6ff;
+  border: 1px solid #3d4b74;
+  border-radius: 6px;
+  padding: 0.4rem 0.55rem;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.viewer-row {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 300px;
+}
+
+.viewer {
+  position: relative;
+  min-height: 0;
+}
+
+.side-panel {
+  border-left: 1px solid #1f2942;
+  background: #0f1729;
+  padding: 0.75rem;
+  overflow: auto;
+}
+
+.hud {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  background: rgba(10, 16, 28, 0.78);
+  border: 1px solid rgba(65, 86, 131, 0.6);
+  border-radius: 6px;
+  font-size: 0.78rem;
+  padding: 0.45rem 0.6rem;
+  pointer-events: none;
+}
+
+.tag {
+  border-radius: 999px;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid #4f5f8b;
+  font-size: 0.8rem;
+}
+
+.tag.ok {
+  background: rgba(30, 160, 100, 0.3);
+  border-color: #31b878;
+}
+
+.tag.warn {
+  background: rgba(200, 124, 16, 0.3);
+  border-color: #f0a032;
+}
+
+.panel-box {
+  border: 1px solid #25345a;
+  border-radius: 8px;
+  padding: 0.65rem;
+  margin-bottom: 0.65rem;
+  background: #121f38;
+}
