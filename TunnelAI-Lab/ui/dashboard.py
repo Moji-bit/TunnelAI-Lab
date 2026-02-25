@@ -415,3 +415,6 @@ if st.session_state.playing:
     else:
         st.session_state.playing = False
         st.success("Run fertig ✅")
+
+# JETZT erst rendern
+render_frame(st.session_state.i)
