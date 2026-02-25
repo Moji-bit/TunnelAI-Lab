@@ -350,11 +350,19 @@ def render_frame(i: int) -> None:
 
     # Chart (selected signals)
     plot_df = view[chart_tags] if chart_tags else view.iloc[:, :8]
-    chart_area.line_chart(plot_df)
+    # Normalize chart input to avoid Altair/jsonschema recursion issues with mixed dtypes/index objects.
+    plot_df = plot_df.apply(pd.to_numeric, errors="coerce")
+    plot_df = plot_df.replace([float("inf"), float("-inf")], pd.NA).dropna(axis=1, how="all")
+
+    if plot_df.empty:
+        chart_area.info("Keine numerischen Werte für die aktuelle Auswahl vorhanden.")
+    else:
+        # Use simple RangeIndex to keep the backend payload strictly tabular/numeric.
+        chart_area.line_chart(plot_df.reset_index(drop=True))
 
     # Table (nur sichtbare/ausgewählte Spalten, um UI-Lag zu reduzieren)
     table_cols = list(plot_df.columns)[: min(12, len(plot_df.columns))]
-    table_area.dataframe(view[table_cols].tail(12), use_container_width=True)
+    table_area.dataframe(view[table_cols].tail(12) if table_cols else pd.DataFrame(), use_container_width=True)
 
     # Status
     ts = df_wide.index[i]
@@ -429,5 +437,3 @@ if st.session_state.playing:
         st.session_state.playing = False
         st.success("Run fertig ✅")
 
-# JETZT erst rendern
-render_frame(st.session_state.i)
