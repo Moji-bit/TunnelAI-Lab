@@ -28,9 +28,9 @@ def rule_based_predictions(series):
     y_true = []
     y_pred = []
     for x in series:
-        speed = x.get('Z2.TRAF.Speed', 100.0)
-        density = x.get('Z2.TRAF.Density', 0.0)
-        co = x.get('Z2.CO.S01.Value', 0.0)
+        speed = x.get('Z2.TRAF.AGG.S01.Speed_10s', x.get('Z2.TRAF.Speed', 100.0))
+        density = x.get('Z2.TRAF.AGG.S01.Density_10s', x.get('Z2.TRAF.Density', 0.0))
+        co = x.get('Z2.ENV.AGG.S01.CO_10s', x.get('Z2.CO.S01.Value', 0.0))
         event = x.get('Z2.EVENT.IncidentFlag', x.get('Z3.EVT.Incident.Active', 0.0))
         pred = 1 if (speed < 35.0 or density > 80.0 or co > 120.0) else 0
         y_true.append(1 if event >= 0.5 else 0)
@@ -82,12 +82,12 @@ def main():
     X, y = [], []
     for x in series:
         X.append([
-            x.get('Z2.TRAF.Speed', 100.0),
-            x.get('Z2.TRAF.Density', 0.0),
-            x.get('Z2.CO.S01.Value', 0.0),
-            x.get('Z2.VIS.S01.Value', 100.0),
-            x.get('Z2.VMS.SpeedLimit', 90.0),
-            x.get('Z2.FAN.StageCmd', 0.0),
+            x.get('Z2.TRAF.AGG.S01.Speed_10s', x.get('Z2.TRAF.Speed', 100.0)),
+            x.get('Z2.TRAF.AGG.S01.Density_10s', x.get('Z2.TRAF.Density', 0.0)),
+            x.get('Z2.ENV.AGG.S01.CO_10s', x.get('Z2.CO.S01.Value', 0.0)),
+            x.get('Z2.ENV.AGG.S01.VIS_10s', x.get('Z2.VIS.S01.Value', 100.0)),
+            x.get('Z1.VMS.SIGN.V01.SpeedSet', x.get('Z2.VMS.SpeedLimit', 90.0)),
+            x.get('Z2.VENT.GRP.G01.TargetStage', x.get('Z2.FAN.StageCmd', 0.0)),
         ])
         y.append(1 if x.get('Z2.EVENT.IncidentFlag', x.get('Z3.EVT.Incident.Active', 0.0)) >= 0.5 else 0)
 

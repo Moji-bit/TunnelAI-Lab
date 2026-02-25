@@ -16,7 +16,7 @@ def parse_args() -> argparse.Namespace:
 
 def load_active_series(csv_path: Path) -> dict[str, list[tuple[datetime, int]]]:
     per_scenario: dict[str, dict[datetime, int]] = defaultdict(dict)
-    active_tags = {"Z3.EVT.Incident.Active", "Z2.EVENT.IncidentFlag"}
+    active_tags = {"Z3.EVT.Incident.Active", "Z2.EVENT.IncidentFlag"}  # second tag kept for legacy CSV support
     with csv_path.open("r", encoding="utf-8", newline="") as f:
         r = csv.DictReader(f)
         for row in r:
