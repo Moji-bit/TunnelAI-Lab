@@ -1,3 +1,16 @@
+"""ui/dashboard.py
+
+Streamlit user interface for non-technical exploration of generated tunnel data.
+
+Main capabilities:
+1) Run a configured scenario and create a CSV file
+2) Load an existing CSV and replay it like a live stream
+3) Filter/select signals using metadata from tags.yaml
+4) Display status and simple risk-oriented tag ranking
+
+This file intentionally keeps UI logic in one place for readability during thesis work.
+"""
+
 # ui/dashboard.py
 from __future__ import annotations
 
