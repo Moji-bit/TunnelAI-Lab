@@ -2,12 +2,8 @@
 from __future__ import annotations
 
 import os
-
-try:
-    from streamlit_autorefresh import st_autorefresh
-except ModuleNotFoundError:
-    def st_autorefresh(*_args, **_kwargs) -> int:
-        return 0
+import sys
+import time
 
 from datetime import datetime
 from typing import List, Optional
@@ -409,15 +405,14 @@ def render_frame(i: int) -> None:
 # -------------------------
 if st.session_state.playing:
     interval_ms = max(800, int(1000 / play_speed))  # langsameres Tick-Tempo reduziert Blinken/Frieren
-    tick = st_autorefresh(interval=interval_ms, key="player_refresh")
+    time.sleep(interval_ms / 1000.0)
 
-    # nur wenn ein Tick passiert ist, Index erhöhen
-    if tick is not None:
-        if st.session_state.i < len(df_wide) - 1:
-            st.session_state.i += 1
-        else:
-            st.session_state.playing = False
-            st.success("Run fertig ✅")
+    if st.session_state.i < len(df_wide) - 1:
+        st.session_state.i += 1
+        st.rerun()
+    else:
+        st.session_state.playing = False
+        st.success("Run fertig ✅")
 
 # JETZT erst rendern
 render_frame(st.session_state.i)
