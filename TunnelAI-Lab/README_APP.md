@@ -64,3 +64,23 @@ run_reports_after_batch.bat
 ```bat
 git pull
 ```
+
+## TunnelAI-Viz Backend (FastAPI + WebSocket MVP)
+```bash
+pip install -r backend/requirements.txt
+uvicorn backend.app.main:app --reload --port 8000
+```
+
+### Endpoints
+- `GET /api/health`
+- `GET /api/scenarios`
+- `GET /api/scenarios/{id}/meta`
+- `WS /ws/playback?scenario_id=stau_case_00`
+- `WS /ws/live`
+
+### Playback control messages
+Send JSON messages to `/ws/playback`:
+- `{"cmd":"play"}`
+- `{"cmd":"pause"}`
+- `{"cmd":"seek","t":120}`
+- `{"cmd":"speed","factor":10}`
