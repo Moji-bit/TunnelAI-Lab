@@ -1,6 +1,6 @@
 # ============================================================
 # tags.yaml — Predictive Tunnel Operations Lab (Tauerntunnel-Style) v0.1
-# Naming: Z{zone}.{Subsystem}.{AssetID}.{Signal}
+# Naming (hierarchical): Z{zone}.{Subsystem}.{Class}.{AssetID}.{Signal...}
 # Zones: 1=Field, 2=Group/Aggregation, 3=Process/STI, 4=Control Center (BZ/VMZ)
 # ============================================================
 

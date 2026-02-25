@@ -33,9 +33,9 @@ def load_series(csv_path: Path):
 
 
 def rule_score(x):
-    speed = x.get("Z2.TRAF.Speed", x.get("Z2.TRAF.AGG.S01.Speed_10s", 100.0))
-    density = x.get("Z2.TRAF.Density", x.get("Z2.TRAF.AGG.S01.Density_10s", 0.0))
-    co = x.get("Z2.CO.S01.Value", x.get("Z2.ENV.AGG.S01.CO_10s", 0.0))
+    speed = x.get("Z2.TRAF.AGG.S01.Speed_10s", x.get("Z2.TRAF.Speed", 100.0))
+    density = x.get("Z2.TRAF.AGG.S01.Density_10s", x.get("Z2.TRAF.Density", 0.0))
+    co = x.get("Z2.ENV.AGG.S01.CO_10s", x.get("Z2.CO.S01.Value", 0.0))
 
     score = 0.0
     score += max(0.0, min(1.0, (35.0 - speed) / 35.0))
@@ -84,9 +84,9 @@ def main():
         y_pred = vals[:-1]
         return mae(y_true, y_pred), rmse(y_true, y_pred)
 
-    sp_mae, sp_rmse = persistence_metric("Z2.TRAF.Speed")
-    co_mae, co_rmse = persistence_metric("Z2.CO.S01.Value")
-    vis_mae, vis_rmse = persistence_metric("Z2.VIS.S01.Value")
+    sp_mae, sp_rmse = persistence_metric("Z2.TRAF.AGG.S01.Speed_10s")
+    co_mae, co_rmse = persistence_metric("Z2.ENV.AGG.S01.CO_10s")
+    vis_mae, vis_rmse = persistence_metric("Z2.ENV.AGG.S01.VIS_10s")
 
     # repeated-seed style uncertainty from per-run blocks by scenario_id if available
     # fallback: split into 5 contiguous chunks
