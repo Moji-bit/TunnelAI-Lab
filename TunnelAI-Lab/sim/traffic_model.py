@@ -13,6 +13,7 @@ surrogate suitable for synthetic data generation and ML experimentation.
 
 from dataclasses import dataclass
 import math
+from typing import Tuple
 
 
 @dataclass
@@ -85,7 +86,7 @@ def step_traffic(
     q_in_veh_per_h: float,
     vms_speed_limit_kmh: float,
     capacity_factor: float = 1.0,
-) -> TrafficState:
+) -> Tuple[TrafficState, float]:
     """Advance traffic state by one time step.
 
     Args:
@@ -96,7 +97,8 @@ def step_traffic(
         capacity_factor: multiplicative reduction of road capacity
 
     Returns:
-        New `TrafficState` with updated density, speed, queue index.
+        Tuple `(state_next, q_out_veh_per_h)` with updated traffic state and
+        the physically constrained outflow used in conservation update.
     """
     dt = p.dt_s
     dt_h = dt / 3600.0
@@ -127,4 +129,4 @@ def step_traffic(
     rho_next = max(0.0, min(p.rho_max_veh_per_km, rho_next))
     v_next = max(0.0, min(p.v_free_kmh, v_next))
 
-    return TrafficState(rho_veh_per_km=rho_next, v_kmh=v_next, queue_index=queue_next)
+    return TrafficState(rho_veh_per_km=rho_next, v_kmh=v_next, queue_index=queue_next), q_out

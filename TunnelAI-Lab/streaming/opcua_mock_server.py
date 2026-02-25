@@ -196,7 +196,8 @@ def generate_stream(
         fan_stage_dyn = fan_stage_with_hysteresis(fan_stage_dyn, float(emis.co_ppm), vis_prev)
 
         # Coupled model updates.
-        traffic = step_traffic(traffic_p, traffic, q_in_veh_per_h, vms_speed_kmh, cap)
+        traffic, q_out_veh_per_h = step_traffic(traffic_p, traffic, q_in_veh_per_h, vms_speed_kmh, cap)
+        q_out_veh_per_min = q_out_veh_per_h / 60.0
         emis = step_emissions(
             emis_p,
             emis,
@@ -221,7 +222,10 @@ def generate_stream(
         # -------------------------
         # Zone 1 — traffic raw detectors
         # -------------------------
+        # NOTE: `Flow` is kept as legacy alias for demand/inflow.
         tags[f"Z1.TRAF.DET.{segment}.Flow"] = add_noise(rng, q_in_veh_per_min, sigma=0.8, lo=0.0)
+        tags[f"Z1.TRAF.DET.{segment}.FlowIn"] = add_noise(rng, q_in_veh_per_min, sigma=0.8, lo=0.0)
+        tags[f"Z1.TRAF.DET.{segment}.FlowOut"] = add_noise(rng, q_out_veh_per_min, sigma=0.8, lo=0.0)
         tags[f"Z1.TRAF.DET.{segment}.Speed"] = add_noise(rng, float(traffic.v_kmh), sigma=1.5, lo=0.0, hi=140.0)
         tags[f"Z1.TRAF.DET.{segment}.Occ"] = add_noise(rng, occ_pct, sigma=1.0, lo=0.0, hi=100.0)
         tags[f"Z1.TRAF.DET.{segment}.HeavyRatio"] = add_noise(rng, heavy_ratio, sigma=0.6, lo=0.0, hi=100.0)
@@ -248,7 +252,12 @@ def generate_stream(
         # -------------------------
         # Zone 2 — aggregate indicators
         # -------------------------
-        tags[f"Z2.TRAF.AGG.{segment}.Flow_10s"] = q_in_veh_per_min
+        tags[f"Z2.TRAF.AGG.{segment}.Flow_10s"] = q_in_veh_per_min  # legacy (inflow)
+        tags[f"Z2.TRAF.AGG.{segment}.FlowIn_10s"] = q_in_veh_per_min
+        tags[f"Z2.TRAF.AGG.{segment}.FlowOut_10s"] = q_out_veh_per_min
+        tags[f"Z2.TRAF.AGG.{segment}.QueueIndex"] = float(traffic.queue_index)
+        speed_for_tt = max(5.0, float(traffic.v_kmh))
+        tags[f"Z2.TRAF.AGG.{segment}.TravelTimeProxy_s"] = float((traffic_p.segment_length_km / speed_for_tt) * 3600.0)
         tags[f"Z2.TRAF.AGG.{segment}.Speed_10s"] = float(traffic.v_kmh)
         tags[f"Z2.TRAF.AGG.{segment}.Density_10s"] = float(traffic.rho_veh_per_km)
         tags[f"Z2.TRAF.AGG.{segment}.JamIndex"] = jam_index_from_speed(float(traffic.v_kmh), freeflow_kmh=100.0)

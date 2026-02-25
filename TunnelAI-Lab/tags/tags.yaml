@@ -24,7 +24,27 @@ tags:
   # ------------------------------------------------------------
   # A) TRAFFIC — Zone 1 (raw detectors per segment)
   # ------------------------------------------------------------
-  - tag_id: "Z1.TRAF.DET.S01.Flow"   # veh/min
+  - tag_id: "Z1.TRAF.DET.S01.Flow"   # veh/min (legacy alias for inflow/demand)
+    unit: "veh/min"
+    zone: 1
+    subsystem: "TRAF"
+    asset_id: "DET_S01"
+    sampling_hz: 1
+    quality: "opcua_status"
+    criticality: "medium"
+    limits: { min: 0, max: 300 }
+
+  - tag_id: "Z1.TRAF.DET.S01.FlowIn"   # veh/min
+    unit: "veh/min"
+    zone: 1
+    subsystem: "TRAF"
+    asset_id: "DET_S01"
+    sampling_hz: 1
+    quality: "opcua_status"
+    criticality: "medium"
+    limits: { min: 0, max: 300 }
+
+  - tag_id: "Z1.TRAF.DET.S01.FlowOut"  # veh/min
     unit: "veh/min"
     zone: 1
     subsystem: "TRAF"
@@ -249,6 +269,10 @@ tags:
   # E) ZONE 2 — Aggregates/Derived (10s signals)
   # ------------------------------------------------------------
   - { tag_id: "Z2.TRAF.AGG.S01.Flow_10s", unit: "veh/min", zone: 2, subsystem: "TRAF", asset_id: "AGG_S01", sampling_hz: 0.1, quality: "opcua_status", criticality: "medium" }
+  - { tag_id: "Z2.TRAF.AGG.S01.FlowIn_10s", unit: "veh/min", zone: 2, subsystem: "TRAF", asset_id: "AGG_S01", sampling_hz: 0.1, quality: "opcua_status", criticality: "medium" }
+  - { tag_id: "Z2.TRAF.AGG.S01.FlowOut_10s", unit: "veh/min", zone: 2, subsystem: "TRAF", asset_id: "AGG_S01", sampling_hz: 0.1, quality: "opcua_status", criticality: "medium" }
+  - { tag_id: "Z2.TRAF.AGG.S01.QueueIndex", unit: "ratio", zone: 2, subsystem: "TRAF", asset_id: "AGG_S01", sampling_hz: 0.1, quality: "opcua_status", criticality: "high", limits: { min: 0, max: 1 } }
+  - { tag_id: "Z2.TRAF.AGG.S01.TravelTimeProxy_s", unit: "s", zone: 2, subsystem: "TRAF", asset_id: "AGG_S01", sampling_hz: 0.1, quality: "opcua_status", criticality: "medium", limits: { min: 0, max: 3600 } }
   - { tag_id: "Z2.TRAF.AGG.S01.Speed_10s", unit: "km/h", zone: 2, subsystem: "TRAF", asset_id: "AGG_S01", sampling_hz: 0.1, quality: "opcua_status", criticality: "high" }
   - { tag_id: "Z2.TRAF.AGG.S01.Density_10s", unit: "veh/km", zone: 2, subsystem: "TRAF", asset_id: "AGG_S01", sampling_hz: 0.1, quality: "opcua_status", criticality: "medium", limits: { min: 0, max: 250 } }
   - { tag_id: "Z2.TRAF.AGG.S01.JamIndex", unit: "ratio", zone: 2, subsystem: "TRAF", asset_id: "AGG_S01", sampling_hz: 0.1, quality: "opcua_status", criticality: "high", limits: { min: 0, max: 1 } }
