@@ -3,15 +3,7 @@ from __future__ import annotations
 
 import os
 import sys
-
-try:
-    from streamlit_autorefresh import st_autorefresh
-    HAS_AUTOREFRESH = True
-except ModuleNotFoundError:
-    HAS_AUTOREFRESH = False
-
-    def st_autorefresh(*_args, **_kwargs):
-        return None
+import time
 
 from datetime import datetime
 from typing import List, Optional
@@ -409,20 +401,20 @@ def render_frame(i: int) -> None:
 
 
 # -------------------------
-# Erst rendern, dann Playback-Tick planen
+# Erst rendern, dann ggf. nächsten Tick planen
 # -------------------------
 render_frame(st.session_state.i)
 
 if st.session_state.playing:
     interval_ms = max(800, int(1000 / play_speed))  # langsameres Tick-Tempo reduziert Blinken/Frieren
+    time.sleep(interval_ms / 1000.0)
 
-    if not HAS_AUTOREFRESH:
-        st.warning("Auto-Playback braucht `streamlit-autorefresh`. Bitte einmal installieren: `pip install streamlit-autorefresh`.")
-        st.session_state.playing = False
+    if st.session_state.i < len(df_wide) - 1:
+        st.session_state.i += 1
+        st.rerun()
     else:
-        tick = st_autorefresh(interval=interval_ms, key="player_refresh")
-        if tick is not None and st.session_state.i < len(df_wide) - 1:
-            st.session_state.i += 1
-        elif st.session_state.i >= len(df_wide) - 1:
-            st.session_state.playing = False
-            st.success("Run fertig ✅")
+        st.session_state.playing = False
+        st.success("Run fertig ✅")
+
+# JETZT erst rendern
+render_frame(st.session_state.i)
