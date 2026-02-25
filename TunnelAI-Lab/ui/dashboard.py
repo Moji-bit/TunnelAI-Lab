@@ -401,8 +401,10 @@ def render_frame(i: int) -> None:
 
 
 # -------------------------
-# Playback tick (MUSS vor render_frame kommen)
+# Erst rendern, dann ggf. nächsten Tick planen
 # -------------------------
+render_frame(st.session_state.i)
+
 if st.session_state.playing:
     interval_ms = max(800, int(1000 / play_speed))  # langsameres Tick-Tempo reduziert Blinken/Frieren
     time.sleep(interval_ms / 1000.0)
