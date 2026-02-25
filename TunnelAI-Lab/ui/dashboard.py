@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import os
-import sys
 
 try:
     from streamlit_autorefresh import st_autorefresh
@@ -28,6 +27,7 @@ from streaming.run_record import load_scenario, record_to_csv
 # -------------------------
 # Paths / Constants
 # -------------------------
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 SCENARIO_DIR = os.path.join(BASE_DIR, "scenarios")
 RAW_DIR = os.path.join(BASE_DIR, "data", "raw")
 TAGS_YAML = os.path.join(BASE_DIR, "tags", "tags.yaml")
