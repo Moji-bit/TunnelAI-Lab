@@ -20,7 +20,6 @@ export class ThreeScene {
   private readonly vehiclesLayer = new VehiclesLayer();
   private readonly eventsLayer = new EventsLayer();
   private readonly laneMarkings: THREE.Group;
-  private readonly debugHelpers = new THREE.Group();
   private readonly raycaster = new THREE.Raycaster();
 
   private animationHandle = 0;
@@ -33,10 +32,10 @@ export class ThreeScene {
     private readonly onFps: (fps: number) => void,
   ) {
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x0b1220);
+    this.scene.background = new THREE.Color(0x0c1427);
 
-    this.camera = new THREE.OrthographicCamera(-260, 260, 150, -150, 0.1, 5000);
-    this.camera.position.set(300, 0, 260);
+    this.camera = new THREE.OrthographicCamera(-220, 220, 120, -120, 0.1, 5000);
+    this.camera.position.set(260, 0, 220);
     this.camera.up.set(0, 0, 1);
     this.camera.lookAt(new THREE.Vector3(220, 0, 0));
 
@@ -49,24 +48,13 @@ export class ThreeScene {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableRotate = false;
     this.controls.mouseButtons.RIGHT = THREE.MOUSE.PAN;
-    this.controls.target.set(TUNNEL_LENGTH_METERS * 0.22, 0, 0);
-    this.controls.zoomSpeed = 0.9;
-    this.controls.minZoom = 0.25;
-    this.controls.maxZoom = 8;
+    this.controls.target.set(TUNNEL_LENGTH_METERS * 0.25, 0, 0);
+    this.controls.zoomSpeed = 0.95;
 
-    this.scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-    const directional = new THREE.DirectionalLight(0xffffff, 0.9);
-    directional.position.set(200, 300, 200);
+    this.scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+    const directional = new THREE.DirectionalLight(0xffffff, 0.65);
+    directional.position.set(300, 120, 350);
     this.scene.add(directional);
-
-    const secondaryDirectional = new THREE.DirectionalLight(0xaecaff, 0.45);
-    secondaryDirectional.position.set(-180, -200, 160);
-    this.scene.add(secondaryDirectional);
-
-    this.debugHelpers.add(new THREE.AxesHelper(50));
-    this.debugHelpers.add(new THREE.GridHelper(400, 40, 0x375283, 0x253654));
-    this.debugHelpers.position.set(0, 0, 0.02);
-    this.scene.add(this.debugHelpers);
 
     const tunnel = createTunnelMesh();
     this.laneMarkings = tunnel.laneMarkings;
@@ -76,7 +64,6 @@ export class ThreeScene {
 
     this.renderer.domElement.addEventListener('pointerdown', this.handlePointerDown);
     window.addEventListener('resize', this.handleResize);
-    this.handleResize();
 
     this.animate();
   }
@@ -99,7 +86,6 @@ export class ThreeScene {
     this.vehiclesLayer.setVisible(layers.vehicles);
     this.eventsLayer.setVisible(layers.events);
     this.laneMarkings.visible = layers.laneMarkings;
-    this.debugHelpers.visible = layers.debugHud;
   }
 
   setSelectedVehicle(vehicleId: string | null): void {
