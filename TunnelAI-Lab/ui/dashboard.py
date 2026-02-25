@@ -1,9 +1,14 @@
 # ui/dashboard.py
 from __future__ import annotations
 
-from streamlit_autorefresh import st_autorefresh
-
 import os
+
+try:
+    from streamlit_autorefresh import st_autorefresh
+except ModuleNotFoundError:
+    def st_autorefresh(*_args, **_kwargs) -> int:
+        return 0
+
 from datetime import datetime
 from typing import List, Optional
 
