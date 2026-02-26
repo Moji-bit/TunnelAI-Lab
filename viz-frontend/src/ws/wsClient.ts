@@ -23,12 +23,12 @@ export class TunnelWsClient {
     this.onStats(this.stats);
   }
 
-  connect(mode: Mode, scenarioId: string): void {
+  connect(mode: Mode, scenarioId: string, sessionId?: string): void {
     this.disconnect();
     this.updateStats({ status: 'connecting' });
     const endpoint =
       mode === 'playback'
-        ? `${WS_BASE}/ws/playback?scenario_id=${encodeURIComponent(scenarioId)}`
+        ? `${WS_BASE}/ws/playback?scenario_id=${encodeURIComponent(scenarioId)}${sessionId ? `&session_id=${encodeURIComponent(sessionId)}` : ''}`
         : `${WS_BASE}/ws/live`;
     this.socket = new WebSocket(endpoint);
 

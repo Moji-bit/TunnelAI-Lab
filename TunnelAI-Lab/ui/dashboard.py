@@ -17,6 +17,7 @@ from __future__ import annotations
 import os
 import sys
 import time
+import requests
 
 from datetime import datetime
 from typing import List, Optional
@@ -45,6 +46,7 @@ DEFAULT_START = "2026-01-01T08:00:00+01:00"
 DEFAULT_MAX_SECONDS = 300  # Quick demo; set None for full duration
 
 CRIT_WEIGHT = {"low": 1, "medium": 2, "high": 3, "critical": 4}
+BACKEND_BASE_URL = os.getenv("TUNNEL_BACKEND_URL", "http://127.0.0.1:8000")
 
 
 # -------------------------
@@ -209,6 +211,8 @@ st.session_state.setdefault("last_csv_path", None)
 st.session_state.setdefault("wide", None)
 st.session_state.setdefault("long", None)
 st.session_state.setdefault("status_by_ts", None)
+st.session_state.setdefault("backend_session_id", None)
+st.session_state.setdefault("backend_last_frame", None)
 
 
 # -------------------------
@@ -313,12 +317,53 @@ with st.sidebar:
 # Playback controls
 # -------------------------
 if start_play:
-    st.session_state.playing = True
+    try:
+        if not st.session_state.backend_session_id:
+            resp = requests.post(
+                f"{BACKEND_BASE_URL}/api/playback/session",
+                json={"scenario_id": os.path.splitext(selected_scn)[0]},
+                timeout=3,
+            )
+            resp.raise_for_status()
+            st.session_state.backend_session_id = resp.json()["session_id"]
+
+        requests.post(
+            f"{BACKEND_BASE_URL}/api/playback/session/{st.session_state.backend_session_id}/control",
+            json={"cmd": "play"},
+            timeout=3,
+        ).raise_for_status()
+        st.session_state.playing = True
+    except Exception as ex:
+        st.error(f"Backend-Playback konnte nicht gestartet werden: {ex}")
 if pause_play:
     st.session_state.playing = False
+    if st.session_state.backend_session_id:
+        try:
+            requests.post(
+                f"{BACKEND_BASE_URL}/api/playback/session/{st.session_state.backend_session_id}/control",
+                json={"cmd": "pause"},
+                timeout=3,
+            )
+        except Exception:
+            pass
 if reset_play:
     st.session_state.playing = False
     st.session_state.i = 0
+    st.session_state.backend_last_frame = None
+    if st.session_state.backend_session_id:
+        try:
+            requests.post(
+                f"{BACKEND_BASE_URL}/api/playback/session/{st.session_state.backend_session_id}/control",
+                json={"cmd": "seek", "t": 0},
+                timeout=3,
+            )
+            requests.post(
+                f"{BACKEND_BASE_URL}/api/playback/session/{st.session_state.backend_session_id}/control",
+                json={"cmd": "pause"},
+                timeout=3,
+            )
+        except Exception:
+            pass
 
 
 # -------------------------
@@ -426,6 +471,31 @@ def render_frame(i: int) -> None:
 # -------------------------
 render_frame(st.session_state.i)
 
+if st.session_state.backend_session_id:
+    st.info(
+        "🔗 Frontend Sync: Öffne das Web-Frontend mit URL-Parameter `?session_id="
+        f"{st.session_state.backend_session_id}` um denselben Playback-Stream zu sehen."
+    )
+
+if st.session_state.playing and st.session_state.backend_session_id:
+    try:
+        frame_resp = requests.post(
+            f"{BACKEND_BASE_URL}/api/playback/session/{st.session_state.backend_session_id}/frame",
+            timeout=3,
+        )
+        frame_resp.raise_for_status()
+        st.session_state.backend_last_frame = frame_resp.json()
+
+        with right:
+            st.markdown("---")
+            st.subheader("🚗 Backend-Frame (für Frontend + Dashboard)")
+            frame = st.session_state.backend_last_frame
+            st.write(f"Session: `{st.session_state.backend_session_id}`")
+            st.write(f"t={frame.get('t', 0):.1f}s | Fahrzeuge={len(frame.get('vehicles', []))}")
+            st.dataframe(pd.DataFrame(frame.get("vehicles", [])).head(12), use_container_width=True)
+    except Exception as ex:
+        st.warning(f"Backend-Frame konnte nicht geladen werden: {ex}")
+
 if st.session_state.playing:
     interval_ms = max(800, int(1000 / play_speed))  # langsameres Tick-Tempo reduziert Blinken/Frieren
     time.sleep(interval_ms / 1000.0)
@@ -436,4 +506,3 @@ if st.session_state.playing:
     else:
         st.session_state.playing = False
         st.success("Run fertig ✅")
-
