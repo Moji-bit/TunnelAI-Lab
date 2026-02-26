@@ -1,10 +1,13 @@
 from pathlib import Path
+import sys
 
-from backend.app.playback_engine import PlaybackEngine
-from backend.app.scenario_store import ScenarioStore
+ROOT = Path(__file__).resolve().parents[3]
+BACKEND_ROOT = ROOT / "apps" / "backend"
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
 
-
-ROOT = Path(__file__).resolve().parents[2]
+from app.playback_engine import PlaybackEngine
+from app.scenario_store import ScenarioStore
 
 
 def test_list_scenarios_not_empty() -> None:
