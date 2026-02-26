@@ -47,8 +47,7 @@ export class VehiclesLayer {
     vehicles.forEach((vehicle) => {
       const bundle = this.meshes[vehicle.type];
       const idx = counters[vehicle.type]++;
-      dummy.position.set(laneCenterY(vehicle.tube, vehicle.lane), 0.9, xToWorld(vehicle.x));
-      dummy.rotation.set(0, Math.PI / 2, 0);
+      dummy.position.set(xToWorld(vehicle.x), laneCenterY(vehicle.tube, vehicle.lane), 0.9);
       dummy.updateMatrix();
       bundle.mesh.setMatrixAt(idx, dummy.matrix);
       color.set(vehicle.id === this.selectedVehicleId ? 0xffcf40 : 0xffffff);
