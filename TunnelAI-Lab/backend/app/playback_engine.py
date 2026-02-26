@@ -16,6 +16,10 @@ class PlaybackState:
     t: float = 0.0
 
 
+def _clamp_time(value: float, duration: float) -> float:
+    return max(0.0, min(value, duration))
+
+
 class PlaybackEngine:
     def __init__(self, scenario_meta: dict):
         self.meta = scenario_meta
@@ -34,7 +38,7 @@ class PlaybackEngine:
         self.state.speed_factor = max(0.1, factor)
 
     def seek(self, t: float) -> None:
-        self.state.t = max(0.0, min(t, self.state.duration_s))
+        self.state.t = _clamp_time(t, self.state.duration_s)
 
     def step(self) -> PlaybackFrame:
         if not self.state.paused:
@@ -55,6 +59,16 @@ class PlaybackEngine:
             vehicles=vehicles,
             events=self._events_at(t),
         )
+
+    def status(self) -> dict[str, float | bool | str]:
+        return {
+            "scenario_id": self.state.scenario_id,
+            "t": self.state.t,
+            "duration_s": self.state.duration_s,
+            "paused": self.state.paused,
+            "speed_factor": self.state.speed_factor,
+            "dt": self.state.dt,
+        }
 
     def _vehicle_at(self, idx: int, t: float) -> VehicleState:
         lane = idx % 2 + 1

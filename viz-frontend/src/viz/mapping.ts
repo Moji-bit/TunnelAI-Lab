@@ -1,6 +1,6 @@
 export const TUNNEL_LENGTH_METERS = 1500;
-export const TUBE_SEPARATION = 3.6;
-export const LANE_WIDTH = 1;
+export const TUBE_SEPARATION = 18;
+export const LANE_WIDTH = 3.2;
 
 export function laneCenterY(tube: number, lane: number): number {
   const tubeOffset = tube === 1 ? TUBE_SEPARATION / 2 : -TUBE_SEPARATION / 2;
