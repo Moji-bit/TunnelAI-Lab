@@ -17,9 +17,9 @@ export class VehiclesLayer {
 
   constructor() {
     this.meshes = {
-      car: this.createMeshBundle(new THREE.BoxGeometry(4.4, 0.72, 0.4), 0x2b91ff),
-      truck: this.createMeshBundle(new THREE.BoxGeometry(8.4, 0.82, 0.45), 0x39d26a),
-      emergency: this.createMeshBundle(new THREE.BoxGeometry(5.2, 0.78, 0.45), 0xe43a52),
+      car: this.createMeshBundle(new THREE.BoxGeometry(8.5, 2.2, 1.4), 0x2b91ff),
+      truck: this.createMeshBundle(new THREE.BoxGeometry(14, 2.5, 1.8), 0x39d26a),
+      emergency: this.createMeshBundle(new THREE.BoxGeometry(9.5, 2.3, 1.6), 0xe43a52),
     };
 
     this.group.add(this.meshes.car.mesh, this.meshes.truck.mesh, this.meshes.emergency.mesh);
@@ -47,7 +47,8 @@ export class VehiclesLayer {
     vehicles.forEach((vehicle) => {
       const bundle = this.meshes[vehicle.type];
       const idx = counters[vehicle.type]++;
-      dummy.position.set(xToWorld(vehicle.x), laneCenterY(vehicle.tube, vehicle.lane), 0.25);
+      dummy.position.set(laneCenterY(vehicle.tube, vehicle.lane), 0.9, xToWorld(vehicle.x));
+      dummy.rotation.set(0, Math.PI / 2, 0);
       dummy.updateMatrix();
       bundle.mesh.setMatrixAt(idx, dummy.matrix);
       color.set(vehicle.id === this.selectedVehicleId ? 0xffcf40 : 0xffffff);

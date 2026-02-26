@@ -14,11 +14,13 @@ export interface SceneSelection {
 
 export class ThreeScene {
   private readonly renderer: THREE.WebGLRenderer;
-  private readonly camera: THREE.OrthographicCamera;
+  private readonly camera: THREE.PerspectiveCamera;
   private readonly scene: THREE.Scene;
   private readonly controls: OrbitControls;
   private readonly vehiclesLayer = new VehiclesLayer();
   private readonly eventsLayer = new EventsLayer();
+  private readonly shellGroup: THREE.Group;
+  private readonly equipmentGroup: THREE.Group;
   private readonly laneMarkings: THREE.Group;
   private readonly raycaster = new THREE.Raycaster();
 
@@ -34,12 +36,13 @@ export class ThreeScene {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0c1427);
 
-    this.camera = new THREE.OrthographicCamera(-220, 220, 120, -120, 0.1, 5000);
-    this.camera.position.set(260, 0, 220);
-    this.camera.up.set(0, 0, 1);
-    this.camera.lookAt(new THREE.Vector3(220, 0, 0));
+    this.camera = new THREE.PerspectiveCamera(48, Math.max(1, container.clientWidth) / Math.max(1, container.clientHeight), 0.1, 6000);
+    this.camera.position.set(-18, 14, -120);
+    this.camera.up.set(0, 1, 0);
+    this.camera.lookAt(new THREE.Vector3(0, 2, 420));
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    this.renderer.localClippingEnabled = true;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(container.clientWidth, container.clientHeight);
 
@@ -48,7 +51,7 @@ export class ThreeScene {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableRotate = false;
     this.controls.mouseButtons.RIGHT = THREE.MOUSE.PAN;
-    this.controls.target.set(TUNNEL_LENGTH_METERS * 0.25, 0, 0);
+    this.controls.target.set(0, 2, TUNNEL_LENGTH_METERS * 0.35);
     this.controls.zoomSpeed = 0.95;
 
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.75));
@@ -57,6 +60,8 @@ export class ThreeScene {
     this.scene.add(directional);
 
     const tunnel = createTunnelMesh();
+    this.shellGroup = tunnel.shellGroup;
+    this.equipmentGroup = tunnel.equipmentGroup;
     this.laneMarkings = tunnel.laneMarkings;
     this.scene.add(tunnel.group);
     this.scene.add(this.vehiclesLayer.group);
@@ -83,9 +88,11 @@ export class ThreeScene {
   }
 
   setLayers(layers: LayerVisibility): void {
+    this.shellGroup.visible = layers.tunnelShell;
+    this.equipmentGroup.visible = layers.equipment;
+    this.laneMarkings.visible = layers.laneMarkings;
     this.vehiclesLayer.setVisible(layers.vehicles);
     this.eventsLayer.setVisible(layers.events);
-    this.laneMarkings.visible = layers.laneMarkings;
   }
 
   setSelectedVehicle(vehicleId: string | null): void {
@@ -95,12 +102,7 @@ export class ThreeScene {
   private handleResize = (): void => {
     const width = this.container.clientWidth;
     const height = this.container.clientHeight;
-    const frustum = 220;
-    const aspect = width / Math.max(1, height);
-    this.camera.left = -frustum * aspect;
-    this.camera.right = frustum * aspect;
-    this.camera.top = frustum * 0.55;
-    this.camera.bottom = -frustum * 0.55;
+    this.camera.aspect = width / Math.max(1, height);
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height);
   };
