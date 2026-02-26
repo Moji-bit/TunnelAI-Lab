@@ -1,5 +1,5 @@
 export const TUNNEL_LENGTH_METERS = 1500;
-export const TUBE_SEPARATION = 10;
+export const TUBE_SEPARATION = 18;
 export const LANE_WIDTH = 3.2;
 
 export function laneCenterY(tube: number, lane: number): number {

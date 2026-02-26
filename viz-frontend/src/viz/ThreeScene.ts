@@ -36,9 +36,9 @@ export class ThreeScene {
     this.scene.background = new THREE.Color(0x0c1427);
 
     this.camera = new THREE.PerspectiveCamera(48, Math.max(1, container.clientWidth) / Math.max(1, container.clientHeight), 0.1, 6000);
-    this.camera.position.set(-18, 14, -120);
-    this.camera.up.set(0, 1, 0);
-    this.camera.lookAt(new THREE.Vector3(0, 2, 420));
+    this.camera.position.set(-120, -8, 26);
+    this.camera.up.set(0, 0, 1);
+    this.camera.lookAt(new THREE.Vector3(620, 0, 2));
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -49,7 +49,7 @@ export class ThreeScene {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableRotate = false;
     this.controls.mouseButtons.RIGHT = THREE.MOUSE.PAN;
-    this.controls.target.set(0, 2, TUNNEL_LENGTH_METERS * 0.35);
+    this.controls.target.set(TUNNEL_LENGTH_METERS * 0.45, 0, 1.5);
     this.controls.zoomSpeed = 0.95;
 
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.75));
