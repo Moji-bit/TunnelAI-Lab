@@ -10,13 +10,16 @@ from .playback_engine import PlaybackEngine
 from .playback_manager import PlaybackManager
 
 
-async def control_ws(websocket: WebSocket, playback: PlaybackManager, scenario_id: str, session_id: str | None) -> None:
+async def playback_ws(websocket: WebSocket, playback: PlaybackManager, scenario_id: str, session_id: str | None) -> None:
     await websocket.accept()
     session = playback.get_or_create(scenario_id=scenario_id, session_id=session_id)
     engine: PlaybackEngine = session.engine
 
     try:
         while True:
+            frame = engine.step().model_dump()
+            frame["session_id"] = session.id
+            await websocket.send_json(frame)
             try:
                 incoming = await asyncio.wait_for(websocket.receive_text(), timeout=0.01)
                 _apply_control(engine, incoming)

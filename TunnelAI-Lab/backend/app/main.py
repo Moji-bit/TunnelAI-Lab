@@ -18,9 +18,9 @@ app = FastAPI(title="TunnelAI-Viz Backend", version="0.1.0")
 app.include_router(build_api_router(store, playback))
 
 
-@app.websocket("/ws")
-async def ws_control_route(websocket: WebSocket, scenario_id: str, session_id: str | None = None) -> None:
-    await control_ws(websocket, playback=playback, scenario_id=scenario_id, session_id=session_id)
+@app.websocket("/ws/playback")
+async def ws_playback_route(websocket: WebSocket, scenario_id: str, session_id: str | None = None) -> None:
+    await playback_ws(websocket, playback=playback, scenario_id=scenario_id, session_id=session_id)
 
 
 @app.websocket("/ws/live")
