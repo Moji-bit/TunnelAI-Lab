@@ -18,8 +18,8 @@ export function createTunnelMesh(): TunnelParts {
   const extinguisherMaterial = new THREE.MeshStandardMaterial({ color: 0xe53f3f, roughness: 0.45, metalness: 0.15 });
   const nicheMaterial = new THREE.MeshStandardMaterial({ color: 0x2d405f, roughness: 0.8, metalness: 0.05 });
   const crossPassageMaterial = new THREE.MeshStandardMaterial({ color: 0x69758d, roughness: 0.7, metalness: 0.1 });
-  const tunnelRadius = LANE_WIDTH * 2.2;
-  const shellThickness = 0.75;
+  const tunnelRadius = LANE_WIDTH * 2.45;
+  const shellThickness = 0.9;
 
   for (const tube of [1, 2]) {
     const road = new THREE.Mesh(new THREE.PlaneGeometry(TUNNEL_LENGTH_METERS, 2 * LANE_WIDTH + 3.2), roadMaterial);
@@ -37,7 +37,14 @@ export function createTunnelMesh(): TunnelParts {
 
     const tubeCenterY = tube === 1 ? TUBE_SEPARATION / 2 : -TUBE_SEPARATION / 2;
     const outerShell = new THREE.Mesh(
-      new THREE.CylinderGeometry(tunnelRadius + shellThickness, tunnelRadius + shellThickness, TUNNEL_LENGTH_METERS, 36, 1, true, 0, Math.PI),
+      new THREE.CylinderGeometry(
+        tunnelRadius + shellThickness,
+        tunnelRadius + shellThickness,
+        TUNNEL_LENGTH_METERS,
+        56,
+        1,
+        false,
+      ),
       wallMaterial,
     );
     outerShell.rotation.z = Math.PI / 2;
@@ -45,7 +52,7 @@ export function createTunnelMesh(): TunnelParts {
     group.add(outerShell);
 
     const innerLining = new THREE.Mesh(
-      new THREE.CylinderGeometry(tunnelRadius, tunnelRadius, TUNNEL_LENGTH_METERS, 36, 1, true, 0, Math.PI),
+      new THREE.CylinderGeometry(tunnelRadius, tunnelRadius, TUNNEL_LENGTH_METERS, 56, 1, false),
       new THREE.MeshStandardMaterial({ color: 0x2c3857, roughness: 0.88, metalness: 0.06, side: THREE.BackSide }),
     );
     innerLining.rotation.z = Math.PI / 2;
@@ -54,11 +61,11 @@ export function createTunnelMesh(): TunnelParts {
 
     for (let x = 70; x < TUNNEL_LENGTH_METERS; x += 120) {
       const ventilation = new THREE.Mesh(new THREE.BoxGeometry(12, 2.2, 1.1), ventilationMaterial);
-      ventilation.position.set(x, tubeCenterY, tunnelRadius * 1.65);
+      ventilation.position.set(x, tubeCenterY, tunnelRadius * 1.85);
       group.add(ventilation);
 
       const camera = new THREE.Mesh(new THREE.SphereGeometry(0.8, 16, 16), cameraMaterial);
-      camera.position.set(x + 20, tubeCenterY + LANE_WIDTH * 1.25, tunnelRadius * 0.95);
+      camera.position.set(x + 20, tubeCenterY + LANE_WIDTH * 1.35, tunnelRadius * 1.15);
       group.add(camera);
 
       const extinguisher = new THREE.Mesh(new THREE.BoxGeometry(1, 0.9, 3.2), extinguisherMaterial);
