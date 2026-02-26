@@ -18,6 +18,8 @@ export function createTunnelMesh(): TunnelParts {
   const extinguisherMaterial = new THREE.MeshStandardMaterial({ color: 0xe53f3f, roughness: 0.45, metalness: 0.15 });
   const nicheMaterial = new THREE.MeshStandardMaterial({ color: 0x2d405f, roughness: 0.8, metalness: 0.05 });
   const crossPassageMaterial = new THREE.MeshStandardMaterial({ color: 0x69758d, roughness: 0.7, metalness: 0.1 });
+  const tunnelRadius = LANE_WIDTH * 2.2;
+  const shellThickness = 0.75;
 
   for (const tube of [1, 2]) {
     const road = new THREE.Mesh(new THREE.PlaneGeometry(TUNNEL_LENGTH_METERS, 2 * LANE_WIDTH + 3.2), roadMaterial);
@@ -33,33 +35,38 @@ export function createTunnelMesh(): TunnelParts {
       laneMarkings.add(marker);
     }
 
-    const leftWall = new THREE.Mesh(new THREE.BoxGeometry(TUNNEL_LENGTH_METERS, 0.7, 4.2), wallMaterial);
-    leftWall.position.set(
-      TUNNEL_LENGTH_METERS / 2,
-      (tube === 1 ? TUBE_SEPARATION / 2 : -TUBE_SEPARATION / 2) + (LANE_WIDTH + 1.2),
-      2.1,
+    const tubeCenterY = tube === 1 ? TUBE_SEPARATION / 2 : -TUBE_SEPARATION / 2;
+    const outerShell = new THREE.Mesh(
+      new THREE.CylinderGeometry(tunnelRadius + shellThickness, tunnelRadius + shellThickness, TUNNEL_LENGTH_METERS, 36, 1, true, 0, Math.PI),
+      wallMaterial,
     );
+    outerShell.rotation.z = Math.PI / 2;
+    outerShell.position.set(TUNNEL_LENGTH_METERS / 2, tubeCenterY, tunnelRadius - 0.25);
+    group.add(outerShell);
 
-    const rightWall = leftWall.clone();
-    rightWall.position.y =
-      (tube === 1 ? TUBE_SEPARATION / 2 : -TUBE_SEPARATION / 2) - (LANE_WIDTH + 1.2);
-    group.add(leftWall, rightWall);
+    const innerLining = new THREE.Mesh(
+      new THREE.CylinderGeometry(tunnelRadius, tunnelRadius, TUNNEL_LENGTH_METERS, 36, 1, true, 0, Math.PI),
+      new THREE.MeshStandardMaterial({ color: 0x2c3857, roughness: 0.88, metalness: 0.06, side: THREE.BackSide }),
+    );
+    innerLining.rotation.z = Math.PI / 2;
+    innerLining.position.set(TUNNEL_LENGTH_METERS / 2, tubeCenterY, tunnelRadius - 0.25);
+    group.add(innerLining);
 
     for (let x = 70; x < TUNNEL_LENGTH_METERS; x += 120) {
       const ventilation = new THREE.Mesh(new THREE.BoxGeometry(12, 2.2, 1.1), ventilationMaterial);
-      ventilation.position.set(x, tube === 1 ? TUBE_SEPARATION / 2 : -TUBE_SEPARATION / 2, 6.2);
+      ventilation.position.set(x, tubeCenterY, tunnelRadius * 1.65);
       group.add(ventilation);
 
       const camera = new THREE.Mesh(new THREE.SphereGeometry(0.8, 16, 16), cameraMaterial);
-      camera.position.set(x + 20, (tube === 1 ? TUBE_SEPARATION / 2 : -TUBE_SEPARATION / 2) + 5.3, 3.6);
+      camera.position.set(x + 20, tubeCenterY + LANE_WIDTH * 1.25, tunnelRadius * 0.95);
       group.add(camera);
 
       const extinguisher = new THREE.Mesh(new THREE.BoxGeometry(1, 0.9, 3.2), extinguisherMaterial);
-      extinguisher.position.set(x + 35, (tube === 1 ? TUBE_SEPARATION / 2 : -TUBE_SEPARATION / 2) - 5.7, 1.7);
+      extinguisher.position.set(x + 35, tubeCenterY - LANE_WIDTH * 1.55, 1.7);
       group.add(extinguisher);
 
       const emergencyNiche = new THREE.Mesh(new THREE.BoxGeometry(5.2, 2.4, 4.2), nicheMaterial);
-      emergencyNiche.position.set(x + 46, (tube === 1 ? TUBE_SEPARATION / 2 : -TUBE_SEPARATION / 2) + 6.1, 2.1);
+      emergencyNiche.position.set(x + 46, tubeCenterY + LANE_WIDTH * 1.55, 2.1);
       group.add(emergencyNiche);
     }
   }
