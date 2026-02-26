@@ -41,6 +41,7 @@ export class ThreeScene {
     this.camera.lookAt(new THREE.Vector3(620, 0, 2));
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    this.renderer.localClippingEnabled = true;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(container.clientWidth, container.clientHeight);
 

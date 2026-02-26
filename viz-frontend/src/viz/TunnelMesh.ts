@@ -7,6 +7,32 @@ export interface TunnelParts {
   equipmentGroup: THREE.Group;
 }
 
+function makeTunnelProfile(width = 11, height = 7.5, archRadius = 3.5): THREE.Shape {
+  const shape = new THREE.Shape();
+  const half = width / 2;
+
+  shape.moveTo(-half, 0);
+  shape.lineTo(-half, height - archRadius);
+  shape.absarc(0, height - archRadius, half, Math.PI, 0, false);
+  shape.lineTo(half, 0);
+  shape.lineTo(-half, 0);
+  return shape;
+}
+
+function makeTunnelShellGeometry(shape: THREE.Shape, length: number, wallThickness: number): THREE.ExtrudeGeometry {
+  const outer = shape.clone();
+  const hole = makeTunnelProfile(11 - wallThickness * 2, 7.5 - wallThickness * 0.8, 3.1);
+  outer.holes = [hole];
+  return new THREE.ExtrudeGeometry(outer, {
+    steps: 220,
+    bevelEnabled: false,
+    extrudePath: new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(0, 0, -length),
+    ]),
+  });
+}
+
 export function createTunnelMesh(): TunnelParts {
   const group = new THREE.Group();
   const shellGroup = new THREE.Group();
