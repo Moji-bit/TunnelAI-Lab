@@ -7,17 +7,19 @@ from fastapi import WebSocket
 from starlette.websockets import WebSocketDisconnect
 
 from .playback_engine import PlaybackEngine
-from .scenario_store import ScenarioStore
+from .playback_manager import PlaybackManager
 
 
-async def playback_ws(websocket: WebSocket, store: ScenarioStore, scenario_id: str) -> None:
+async def playback_ws(websocket: WebSocket, playback: PlaybackManager, scenario_id: str, session_id: str | None) -> None:
     await websocket.accept()
-    meta = store.load_meta(scenario_id)
-    engine = PlaybackEngine(meta)
+    session = playback.get_or_create(scenario_id=scenario_id, session_id=session_id)
+    engine: PlaybackEngine = session.engine
 
     try:
         while True:
-            await websocket.send_json(engine.step().model_dump())
+            frame = engine.step().model_dump()
+            frame["session_id"] = session.id
+            await websocket.send_json(frame)
             try:
                 incoming = await asyncio.wait_for(websocket.receive_text(), timeout=0.05)
                 _apply_command(engine, incoming)

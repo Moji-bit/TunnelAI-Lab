@@ -81,13 +81,13 @@ export function App(): JSX.Element {
           return;
         }
 
-        const latest = bufferRef.current.at(-1);
+        const latest = bufferRef.current.length > 0 ? bufferRef.current[bufferRef.current.length - 1] : undefined;
         if (!latest) {
           return;
         }
 
         if (sceneSelection.vehicleId) {
-          const found = latest.vehicles.find((vehicle) => vehicle.id === sceneSelection.vehicleId);
+          const found = latest.vehicles.find((vehicle: VehicleState) => vehicle.id === sceneSelection.vehicleId);
           if (found) {
             setSelection({ kind: 'vehicle', data: found });
             scene.setSelectedVehicle(found.id);
@@ -95,7 +95,7 @@ export function App(): JSX.Element {
         }
 
         if (sceneSelection.eventId) {
-          const found = latest.events.find((event) => event.id === sceneSelection.eventId);
+          const found = latest.events.find((event: EventState) => event.id === sceneSelection.eventId);
           if (found) {
             setSelection({ kind: 'event', data: found });
             scene.setSelectedVehicle(null);
@@ -175,7 +175,9 @@ export function App(): JSX.Element {
   const playbackDisabled = useMemo(() => mode !== 'playback' || stats.status !== 'connected', [mode, stats.status]);
 
   const connect = () => {
-    wsRef.current?.connect(mode, scenarioId);
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get('session_id') ?? undefined;
+    wsRef.current?.connect(mode, scenarioId, sessionId);
     bufferRef.current = [];
     setSelection(null);
   };
