@@ -8,7 +8,7 @@ from .api import build_api_router
 from .playback_manager import PlaybackManager
 from .scenario_store import ScenarioStore
 from .ws_live import live_ws
-from .ws_playback import playback_ws
+from .ws_playback import control_ws
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 store = ScenarioStore(BASE_DIR / "scenarios")

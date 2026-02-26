@@ -44,8 +44,12 @@ export class TunnelWsClient {
       }
       this.pingSentAt = now;
 
-      const parsed = JSON.parse(event.data) as Frame;
-      this.onFrame?.(parsed);
+      const parsed = JSON.parse(event.data) as { type?: string; payload?: Frame } & Frame;
+      if (parsed.type === 'TICK' && parsed.payload) {
+        this.onFrame?.(parsed.payload);
+      } else if (parsed.vehicles) {
+        this.onFrame?.(parsed as Frame);
+      }
     };
 
     this.socket.onclose = () => {
@@ -62,7 +66,7 @@ export class TunnelWsClient {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
       return;
     }
-    this.socket.send(JSON.stringify(payload));
+    this.socket.send(JSON.stringify({ type: 'CONTROL', payload }));
   }
 
   disconnect(): void {
