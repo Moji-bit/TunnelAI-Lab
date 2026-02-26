@@ -57,6 +57,28 @@ export class EventsLayer {
       return incidentGroup;
     }
 
+    if (event.type === 'fire') {
+      const fire = new THREE.Mesh(
+        new THREE.SphereGeometry(1.2, 20, 20),
+        new THREE.MeshBasicMaterial({ color: 0xff5a1f, transparent: true, opacity: 0.8 }),
+      );
+      this.applyTransform(fire, event);
+      fire.position.z = 1.2;
+      return fire;
+    }
+
+    if (event.type === 'smoke') {
+      const width = Math.max(4, event.x1 - event.x0);
+      const smoke = new THREE.Mesh(
+        new THREE.PlaneGeometry(width, 3),
+        new THREE.MeshBasicMaterial({ color: 0x9197a3, transparent: true, opacity: 0.45 }),
+      );
+      smoke.rotation.y = Math.PI / 2;
+      this.applyTransform(smoke, event);
+      smoke.position.z = 2.2;
+      return smoke;
+    }
+
     const width = Math.max(2, event.x1 - event.x0);
     const color = event.type === 'queue' ? 0xff642e : 0x111111;
     const zone = new THREE.Mesh(
@@ -70,6 +92,6 @@ export class EventsLayer {
 
   private applyTransform(object: THREE.Object3D, event: EventState): void {
     const centerX = (event.x0 + event.x1) / 2;
-    object.position.set(xToWorld(centerX), laneCenterY(event.tube, event.lane), 0.05);
+    object.position.set(laneCenterY(event.tube, event.lane), 0.2, xToWorld(centerX));
   }
 }

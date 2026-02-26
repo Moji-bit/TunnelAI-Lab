@@ -23,12 +23,12 @@ export class TunnelWsClient {
     this.onStats(this.stats);
   }
 
-  connect(mode: Mode, scenarioId: string): void {
+  connect(mode: Mode, scenarioId: string, sessionId?: string): void {
     this.disconnect();
     this.updateStats({ status: 'connecting' });
     const endpoint =
       mode === 'playback'
-        ? `${WS_BASE}/ws/playback?scenario_id=${encodeURIComponent(scenarioId)}`
+        ? `${WS_BASE}/ws?scenario_id=${encodeURIComponent(scenarioId)}${sessionId ? `&session_id=${encodeURIComponent(sessionId)}` : ''}`
         : `${WS_BASE}/ws/live`;
     this.socket = new WebSocket(endpoint);
 
@@ -44,8 +44,12 @@ export class TunnelWsClient {
       }
       this.pingSentAt = now;
 
-      const parsed = JSON.parse(event.data) as Frame;
-      this.onFrame?.(parsed);
+      const parsed = JSON.parse(event.data) as { type?: string; payload?: Frame } & Frame;
+      if (parsed.type === 'TICK' && parsed.payload) {
+        this.onFrame?.(parsed.payload);
+      } else if (parsed.vehicles) {
+        this.onFrame?.(parsed as Frame);
+      }
     };
 
     this.socket.onclose = () => {
@@ -62,7 +66,7 @@ export class TunnelWsClient {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
       return;
     }
-    this.socket.send(JSON.stringify(payload));
+    this.socket.send(JSON.stringify({ type: 'CONTROL', payload }));
   }
 
   disconnect(): void {
