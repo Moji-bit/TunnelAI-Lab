@@ -27,7 +27,7 @@ class VehicleState(BaseModel):
 
 class EventState(BaseModel):
     id: str
-    type: Literal["incident", "queue", "closure"]
+    type: Literal["incident", "queue", "closure", "fire", "smoke"]
     tube: int
     lane: int
     x0: float
@@ -36,11 +36,28 @@ class EventState(BaseModel):
     active: bool = True
 
 
+class ActuatorState(BaseModel):
+    id: str
+    type: Literal["fan", "vms"]
+    zone: int
+    state: Literal["off", "on", "warning"] = "off"
+    value: float = 0.0
+
+
+class TimebaseState(BaseModel):
+    t: float
+    dt: float
+    paused: bool
+    speed_factor: float
+
+
 class PlaybackFrame(BaseModel):
     schema: Literal["tunnelai.viz.frame.v1"] = "tunnelai.viz.frame.v1"
     scenario_id: str
     mode: Literal["playback", "live"]
     t: float
     dt: float
+    timebase: TimebaseState
     vehicles: list[VehicleState]
     events: list[EventState]
+    actuators: list[ActuatorState] = Field(default_factory=list)

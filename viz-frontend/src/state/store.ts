@@ -12,7 +12,7 @@ export interface VehicleState {
 
 export interface EventState {
   id: string;
-  type: 'incident' | 'queue' | 'closure';
+  type: 'incident' | 'queue' | 'closure' | 'fire' | 'smoke';
   tube: number;
   lane: number;
   x0: number;
@@ -21,14 +21,31 @@ export interface EventState {
   active: boolean;
 }
 
+export interface ActuatorState {
+  id: string;
+  type: 'fan' | 'vms';
+  zone: number;
+  state: 'off' | 'on' | 'warning';
+  value: number;
+}
+
+export interface TimebaseState {
+  t: number;
+  dt: number;
+  paused: boolean;
+  speed_factor: number;
+}
+
 export interface Frame {
   schema: string;
   scenario_id: string;
   mode: Mode;
   t: number;
   dt: number;
+  timebase: TimebaseState;
   vehicles: VehicleState[];
   events: EventState[];
+  actuators: ActuatorState[];
 }
 
 export interface ScenarioSummary {

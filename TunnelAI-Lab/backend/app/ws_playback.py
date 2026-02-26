@@ -7,35 +7,40 @@ from fastapi import WebSocket
 from starlette.websockets import WebSocketDisconnect
 
 from .playback_engine import PlaybackEngine
-from .scenario_store import ScenarioStore
+from .playback_manager import PlaybackManager
 
 
-async def playback_ws(websocket: WebSocket, store: ScenarioStore, scenario_id: str) -> None:
+async def control_ws(websocket: WebSocket, playback: PlaybackManager, scenario_id: str, session_id: str | None) -> None:
     await websocket.accept()
-    meta = store.load_meta(scenario_id)
-    engine = PlaybackEngine(meta)
+    session = playback.get_or_create(scenario_id=scenario_id, session_id=session_id)
+    engine: PlaybackEngine = session.engine
 
     try:
         while True:
-            await websocket.send_json(engine.step().model_dump())
             try:
-                incoming = await asyncio.wait_for(websocket.receive_text(), timeout=0.05)
-                _apply_command(engine, incoming)
+                incoming = await asyncio.wait_for(websocket.receive_text(), timeout=0.01)
+                _apply_control(engine, incoming)
             except asyncio.TimeoutError:
                 pass
-            await asyncio.sleep(max(0.01, engine.state.dt / 20))
+
+            frame = engine.step().model_dump()
+            await websocket.send_json({"type": "TICK", "session_id": session.id, "payload": frame})
+            await asyncio.sleep(max(0.03, engine.state.dt / 20))
     except WebSocketDisconnect:
         return
 
 
-def _apply_command(engine: PlaybackEngine, raw_message: str) -> None:
+def _apply_control(engine: PlaybackEngine, raw_message: str) -> None:
     payload = json.loads(raw_message)
-    cmd = payload.get("cmd")
+    if payload.get("type") != "CONTROL":
+        return
+    data = payload.get("payload", {})
+    cmd = data.get("cmd")
     if cmd == "pause":
         engine.set_paused(True)
     elif cmd == "play":
         engine.set_paused(False)
     elif cmd == "seek":
-        engine.seek(float(payload.get("t", 0.0)))
+        engine.seek(float(data.get("t", 0.0)))
     elif cmd == "speed":
-        engine.set_speed(float(payload.get("factor", 1.0)))
+        engine.set_speed(float(data.get("factor", 1.0)))

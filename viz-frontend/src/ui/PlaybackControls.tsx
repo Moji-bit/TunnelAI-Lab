@@ -4,6 +4,7 @@ interface PlaybackControlsProps {
   disabled: boolean;
   onPlayPause: () => void;
   onSpeedChange: (speed: number) => void;
+  onSeek: (seconds: number) => void;
 }
 
 const SPEEDS = [0.5, 1, 2, 5, 10, 20];
@@ -28,6 +29,8 @@ export function PlaybackControls(props: PlaybackControlsProps): JSX.Element {
           ))}
         </select>
       </label>
+      <button onClick={() => props.onSeek(-10)} disabled={props.disabled}>⏪ -10s</button>
+      <button onClick={() => props.onSeek(10)} disabled={props.disabled}>⏩ +10s</button>
     </div>
   );
 }
