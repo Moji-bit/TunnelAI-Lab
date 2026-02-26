@@ -45,7 +45,7 @@ export function App(): JSX.Element {
   const [fps, setFps] = useState(0);
   const [paused, setPaused] = useState(false);
   const [speed, setSpeed] = useState(1);
-  const [layers, setLayers] = useState<LayerVisibility>({ tunnelShell: true, equipment: true, laneMarkings: true, vehicles: true, events: true, debugHud: true });
+  const [layers, setLayers] = useState<LayerVisibility>({ tunnelShell: true, equipment: true, vehicles: true, events: true, debugHud: true });
   const [selection, setSelection] = useState<Selection>(null);
   const [hud, setHud] = useState({ t: 0, vehicles: 0, actuatorsOn: 0 });
 

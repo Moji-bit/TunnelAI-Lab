@@ -332,11 +332,6 @@ if start_play:
             json={"cmd": "play"},
             timeout=3,
         ).raise_for_status()
-        requests.post(
-            f"{BACKEND_BASE_URL}/api/playback/session/{st.session_state.backend_session_id}/control",
-            json={"cmd": "speed", "factor": float(play_speed)},
-            timeout=3,
-        ).raise_for_status()
         st.session_state.playing = True
     except Exception as ex:
         st.error(f"Backend-Playback konnte nicht gestartet werden: {ex}")
@@ -484,11 +479,6 @@ if st.session_state.backend_session_id:
 
 if st.session_state.playing and st.session_state.backend_session_id:
     try:
-        requests.post(
-            f"{BACKEND_BASE_URL}/api/playback/session/{st.session_state.backend_session_id}/control",
-            json={"cmd": "speed", "factor": float(play_speed)},
-            timeout=3,
-        ).raise_for_status()
         frame_resp = requests.post(
             f"{BACKEND_BASE_URL}/api/playback/session/{st.session_state.backend_session_id}/frame",
             timeout=3,

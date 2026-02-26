@@ -61,7 +61,6 @@ export interface ScenarioSummary {
 export interface LayerVisibility {
   tunnelShell: boolean;
   equipment: boolean;
-  laneMarkings: boolean;
   vehicles: boolean;
   events: boolean;
   debugHud: boolean;

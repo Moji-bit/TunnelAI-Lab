@@ -44,6 +44,14 @@ class PlaybackEngine:
     def seek(self, t: float) -> None:
         self.state.t = _clamp_time(t, self.state.duration_s)
 
+    def step(self) -> PlaybackFrame:
+        if not self.state.paused:
+            self.state.t = min(
+                self.state.duration_s,
+                self.state.t + self.state.dt * self.state.speed_factor,
+            )
+        return self._build_frame()
+
     def _build_frame(self) -> PlaybackFrame:
         t = self.state.t
         vehicles = [self._vehicle_at(idx, t) for idx in range(self._vehicle_count)]
