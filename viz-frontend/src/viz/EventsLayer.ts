@@ -92,6 +92,6 @@ export class EventsLayer {
 
   private applyTransform(object: THREE.Object3D, event: EventState): void {
     const centerX = (event.x0 + event.x1) / 2;
-    object.position.set(xToWorld(centerX), laneCenterY(event.tube, event.lane), 0.05);
+    object.position.set(laneCenterY(event.tube, event.lane), 0.2, xToWorld(centerX));
   }
 }

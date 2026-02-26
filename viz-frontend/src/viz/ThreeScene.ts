@@ -19,7 +19,8 @@ export class ThreeScene {
   private readonly controls: OrbitControls;
   private readonly vehiclesLayer = new VehiclesLayer();
   private readonly eventsLayer = new EventsLayer();
-  private readonly laneMarkings: THREE.Group;
+  private readonly shellGroup: THREE.Group;
+  private readonly equipmentGroup: THREE.Group;
   private readonly raycaster = new THREE.Raycaster();
 
   private animationHandle = 0;
@@ -57,7 +58,8 @@ export class ThreeScene {
     this.scene.add(directional);
 
     const tunnel = createTunnelMesh();
-    this.laneMarkings = tunnel.laneMarkings;
+    this.shellGroup = tunnel.shellGroup;
+    this.equipmentGroup = tunnel.equipmentGroup;
     this.scene.add(tunnel.group);
     this.scene.add(this.vehiclesLayer.group);
     this.scene.add(this.eventsLayer.group);
@@ -83,9 +85,10 @@ export class ThreeScene {
   }
 
   setLayers(layers: LayerVisibility): void {
+    this.shellGroup.visible = layers.tunnelShell;
+    this.equipmentGroup.visible = layers.equipment;
     this.vehiclesLayer.setVisible(layers.vehicles);
     this.eventsLayer.setVisible(layers.events);
-    this.laneMarkings.visible = layers.laneMarkings;
   }
 
   setSelectedVehicle(vehicleId: string | null): void {

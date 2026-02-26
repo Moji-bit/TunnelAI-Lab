@@ -6,6 +6,7 @@ import json
 from fastapi import WebSocket
 from starlette.websockets import WebSocketDisconnect
 
+from .errors import build_error
 from .playback_engine import PlaybackEngine
 from .playback_manager import PlaybackManager
 
@@ -41,8 +42,10 @@ def _apply_control(engine: PlaybackEngine, raw_message: str) -> None:
     cmd = data.get("cmd")
     if cmd == "pause":
         engine.set_paused(True)
+        return True, None
     elif cmd == "play":
         engine.set_paused(False)
+        return True, None
     elif cmd == "seek":
         engine.seek(float(data.get("t", 0.0)))
     elif cmd == "speed":

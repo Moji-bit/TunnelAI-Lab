@@ -3,15 +3,37 @@ import { LANE_WIDTH, TUNNEL_LENGTH_METERS, TUBE_SEPARATION, laneCenterY } from '
 
 export interface TunnelParts {
   group: THREE.Group;
-  laneMarkings: THREE.Group;
+  shellGroup: THREE.Group;
+  equipmentGroup: THREE.Group;
 }
 
 export function createTunnelMesh(): TunnelParts {
   const group = new THREE.Group();
-  const laneMarkings = new THREE.Group();
+  const shellGroup = new THREE.Group();
+  const equipmentGroup = new THREE.Group();
 
+  const tunnelRadius = LANE_WIDTH * 2.35;
+  const shellThickness = 0.7;
+
+  const shellMaterial = new THREE.MeshStandardMaterial({
+    color: 0x54698f,
+    roughness: 0.85,
+    metalness: 0.05,
+    transparent: true,
+    opacity: 0.26,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+  const liningMaterial = new THREE.MeshStandardMaterial({
+    color: 0x263452,
+    roughness: 0.92,
+    metalness: 0.03,
+    transparent: true,
+    opacity: 0.2,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
   const roadMaterial = new THREE.MeshStandardMaterial({ color: 0x2f3645, roughness: 0.95, metalness: 0.05 });
-  const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x3f4f72, roughness: 0.8, metalness: 0.1 });
   const markMaterial = new THREE.MeshBasicMaterial({ color: 0xe5edf8 });
   const ventilationMaterial = new THREE.MeshStandardMaterial({ color: 0x7f8ea8, roughness: 0.5, metalness: 0.5 });
   const cameraMaterial = new THREE.MeshStandardMaterial({ color: 0xcfd8e8, roughness: 0.25, metalness: 0.6 });
@@ -19,18 +41,25 @@ export function createTunnelMesh(): TunnelParts {
   const nicheMaterial = new THREE.MeshStandardMaterial({ color: 0x2d405f, roughness: 0.8, metalness: 0.05 });
   const crossPassageMaterial = new THREE.MeshStandardMaterial({ color: 0x69758d, roughness: 0.7, metalness: 0.1 });
 
+  const nicheMaterial = new THREE.MeshStandardMaterial({ color: 0x344a6a, roughness: 0.8, metalness: 0.05 });
+  const cameraMaterial = new THREE.MeshStandardMaterial({ color: 0xd7e0f0, roughness: 0.25, metalness: 0.55 });
+  const fanMaterial = new THREE.MeshStandardMaterial({ color: 0x7f8ea8, roughness: 0.5, metalness: 0.5 });
+  const hydrantMaterial = new THREE.MeshStandardMaterial({ color: 0xe53f3f, roughness: 0.45, metalness: 0.15 });
+  const crossPassageMaterial = new THREE.MeshStandardMaterial({ color: 0x6c7691, roughness: 0.7, metalness: 0.08 });
+  const doorMaterial = new THREE.MeshStandardMaterial({ color: 0xaeb6c7, roughness: 0.5, metalness: 0.35 });
+
   for (const tube of [1, 2]) {
     const road = new THREE.Mesh(new THREE.PlaneGeometry(TUNNEL_LENGTH_METERS, 2 * LANE_WIDTH + 3.2), roadMaterial);
     road.rotation.x = -Math.PI / 2;
-    road.position.set(TUNNEL_LENGTH_METERS / 2, tube === 1 ? TUBE_SEPARATION / 2 : -TUBE_SEPARATION / 2, 0);
-    group.add(road);
+    road.position.set(tubeCenterX, 0.01, TUNNEL_LENGTH_METERS / 2);
+    equipmentGroup.add(road);
 
     for (const lane of [1, 2]) {
       const laneCenter = laneCenterY(tube, lane);
       const marker = new THREE.Mesh(new THREE.PlaneGeometry(TUNNEL_LENGTH_METERS, 0.16), markMaterial);
       marker.rotation.x = -Math.PI / 2;
-      marker.position.set(TUNNEL_LENGTH_METERS / 2, laneCenter, 0.01);
-      laneMarkings.add(marker);
+      marker.position.set(laneCenterX, 0.03, TUNNEL_LENGTH_METERS / 2);
+      equipmentGroup.add(marker);
     }
 
     const tubeCenterY = tube === 1 ? TUBE_SEPARATION / 2 : -TUBE_SEPARATION / 2;
@@ -79,6 +108,6 @@ export function createTunnelMesh(): TunnelParts {
     group.add(crossPassage);
   }
 
-  group.add(laneMarkings);
-  return { group, laneMarkings };
+  group.add(shellGroup, equipmentGroup);
+  return { group, shellGroup, equipmentGroup };
 }
