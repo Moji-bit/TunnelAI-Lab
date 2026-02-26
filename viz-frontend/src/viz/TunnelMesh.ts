@@ -20,25 +20,34 @@ export function createTunnelMesh(): TunnelParts {
   const crossPassageMaterial = new THREE.MeshStandardMaterial({ color: 0x69758d, roughness: 0.7, metalness: 0.1 });
 
   for (const tube of [1, 2]) {
-    const road = new THREE.Mesh(new THREE.PlaneGeometry(TUNNEL_LENGTH_METERS, 2 * LANE_WIDTH + 0.5), roadMaterial);
+    const road = new THREE.Mesh(new THREE.PlaneGeometry(TUNNEL_LENGTH_METERS, 2 * LANE_WIDTH + 3.2), roadMaterial);
     road.rotation.x = -Math.PI / 2;
     road.position.set(TUNNEL_LENGTH_METERS / 2, tube === 1 ? TUBE_SEPARATION / 2 : -TUBE_SEPARATION / 2, 0);
     group.add(road);
 
     for (const lane of [1, 2]) {
       const laneCenter = laneCenterY(tube, lane);
-      const marker = new THREE.Mesh(new THREE.PlaneGeometry(TUNNEL_LENGTH_METERS, 0.04), markMaterial);
+      const marker = new THREE.Mesh(new THREE.PlaneGeometry(TUNNEL_LENGTH_METERS, 0.16), markMaterial);
       marker.rotation.x = -Math.PI / 2;
       marker.position.set(TUNNEL_LENGTH_METERS / 2, laneCenter, 0.01);
       laneMarkings.add(marker);
     }
 
-    const leftWall = new THREE.Mesh(new THREE.BoxGeometry(TUNNEL_LENGTH_METERS, 0.08, 0.35), wallMaterial);
-    leftWall.position.set(
-      TUNNEL_LENGTH_METERS / 2,
-      (tube === 1 ? TUBE_SEPARATION / 2 : -TUBE_SEPARATION / 2) + (LANE_WIDTH + 0.25),
-      0.175,
+    const tubeCenterY = tube === 1 ? TUBE_SEPARATION / 2 : -TUBE_SEPARATION / 2;
+    const outerShell = new THREE.Mesh(
+      new THREE.CylinderGeometry(
+        tunnelRadius + shellThickness,
+        tunnelRadius + shellThickness,
+        TUNNEL_LENGTH_METERS,
+        56,
+        1,
+        false,
+      ),
+      wallMaterial,
     );
+    outerShell.rotation.z = Math.PI / 2;
+    outerShell.position.set(TUNNEL_LENGTH_METERS / 2, tubeCenterY, tunnelRadius - 0.25);
+    group.add(outerShell);
 
     const rightWall = leftWall.clone();
     rightWall.position.y =
