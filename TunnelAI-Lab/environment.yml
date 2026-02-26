@@ -8,3 +8,5 @@ dependencies:
   - pandas=2.2.2
   - pyyaml=6.0.2
   - numpy=1.26.4
+  - pip:
+      - streamlit-autorefresh==1.0.1
