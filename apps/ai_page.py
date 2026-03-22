@@ -49,14 +49,6 @@ def _list_files(folder: str, suffix: str) -> List[str]:
     return files
 
 
-def _list_dirs(folder: str) -> List[str]:
-    if not os.path.isdir(folder):
-        return []
-    dirs = [d for d in os.listdir(folder) if os.path.isdir(os.path.join(folder, d))]
-    dirs.sort()
-    return dirs
-
-
 st.set_page_config(page_title="TunnelAI-Lab – AI Page", layout="wide")
 st.title("🤖 TunnelAI-Lab – AI Workflow")
 st.caption("Dataset Builder • Training • Evaluation • Model Test")
@@ -73,20 +65,17 @@ with st.sidebar:
 # -----------------------------------------------------------------------------
 st.header("1) Dataset Builder")
 with st.container(border=True):
-    c0, c1, c2, c3, c4 = st.columns(5)
-    raw_subdirs = _list_dirs(RAW_DIR)
-    raw_dir_options = [RAW_DIR] + [os.path.join(RAW_DIR, d) for d in raw_subdirs]
-    selected_raw_dir = c0.selectbox("raw dir", raw_dir_options, index=0)
+    c1, c2, c3, c4 = st.columns(4)
     input_format = c1.selectbox("input_format", ["wide_csv", "scenario_csv", "long_tag_csv"], index=0)
-    L = c2.number_input("window size (L)", min_value=5, max_value=5000, value=60, step=5)
+    L = c2.number_input("L (window size)", min_value=5, max_value=5000, value=60, step=5)
     H = c3.number_input("H (forecast horizon)", min_value=1, max_value=1000, value=1, step=1)
     stride = c4.number_input("stride", min_value=1, max_value=200, value=5, step=1)
 
-    csv_or_dir_default = selected_raw_dir if input_format in {"wide_csv", "scenario_csv"} else os.path.join(selected_raw_dir, "stau_run_long.csv")
+    csv_or_dir_default = RAW_DIR if input_format in {"wide_csv", "scenario_csv"} else os.path.join(RAW_DIR, "stau_run_long.csv")
     csv_or_dir = st.text_input("CSV path or directory", value=csv_or_dir_default)
     out_dir = st.text_input("Output directory", value=PROC_DIR)
 
-    if st.button("🧱 Build Dataset", use_container_width=True):
+    if st.button("🧱 Build NPZ", use_container_width=True):
         py = (
             "from core.dataset.dataset_builder import DatasetConfig, build_npz_from_csv;"
             f"cfg=DatasetConfig(input_format='{input_format}',L={int(L)},H={int(H)},stride={int(stride)});"
@@ -98,34 +87,6 @@ with st.container(border=True):
         else:
             st.error("NPZ build failed.")
         st.code(out)
-
-        if code == 0:
-            train_npz = os.path.join(out_dir, "train.npz")
-            val_npz = os.path.join(out_dir, "val.npz")
-            test_npz = os.path.join(out_dir, "test.npz")
-            if all(os.path.isfile(p) for p in [train_npz, val_npz, test_npz]):
-                import numpy as np
-
-                dtr = np.load(train_npz, allow_pickle=False)
-                dva = np.load(val_npz, allow_pickle=False)
-                dte = np.load(test_npz, allow_pickle=False)
-
-                y_all = np.concatenate(
-                    [
-                        dtr["Y_event_cls"].astype(np.int64),
-                        dva["Y_event_cls"].astype(np.int64),
-                        dte["Y_event_cls"].astype(np.int64),
-                    ]
-                )
-                vals, cnts = np.unique(y_all, return_counts=True)
-                class_names = dtr["event_class_names"].tolist() if "event_class_names" in dtr.files else []
-                dist = {}
-                for v, c in zip(vals, cnts):
-                    key = class_names[int(v)] if int(v) < len(class_names) else str(int(v))
-                    dist[key] = int(c)
-
-                st.markdown("**Dataset Summary**")
-                st.write({"num_windows": int(len(y_all)), "class_distribution": dist})
 
 
 # -----------------------------------------------------------------------------
