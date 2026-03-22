@@ -1,0 +1,13 @@
+{
+    "scenario_id": "stau_case_04",
+    "seed": 42,
+    "duration_s": 7840,
+    "q_in_base_veh_per_h": 1955.710966281574,
+    "q_in_peak_amp_veh_per_h": 1126.704702608924,
+    "q_in_peak_period_s": 2134,
+    "incident_start_s": 2744,
+    "incident_end_s": 4087,
+    "incident_capacity_drop": 0.29628684762026436,
+    "vms_speed_limit_kmh": 90,
+    "fan_stage": 3
+}

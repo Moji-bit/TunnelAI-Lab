@@ -1,0 +1,10 @@
+name: tunnelai
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11.9
+  - pip=24.2
+  - streamlit=1.31.1
+  - pandas=2.2.2
+  - pyyaml=6.0.2
+  - numpy=1.26.4

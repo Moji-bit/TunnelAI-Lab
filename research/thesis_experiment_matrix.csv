@@ -1,0 +1,11 @@
+run_id,seed,split_id,model,backbone,horizon_s,feature_set,noise_profile,threshold,precision,recall,f1,far,pr_auc,lead_time_s,false_alarms_per_h,mae_speed,rmse_speed,mae_co,rmse_co,mae_vis,rmse_vis,brier,notes
+run_001,42,split_A,rule_based,na,30,traffic_only,nominal,0.50,,,,,,,,,,,,,,,
+run_002,42,split_A,logreg,na,30,traffic_env,nominal,0.50,,,,,,,,,,,,,,,
+run_003,42,split_A,multitask,lstm,30,full,nominal,0.50,,,,,,,,,,,,,,,
+run_004,42,split_A,multitask,transformer,30,full,nominal,0.50,,,,,,,,,,,,,,,
+run_005,43,split_A,multitask,lstm,60,full,high_noise,0.50,,,,,,,,,,,,,,,
+run_006,43,split_A,multitask,transformer,60,full,high_noise,0.50,,,,,,,,,,,,,,,
+run_007,50,split_B,multitask,lstm,120,traffic_env,missing_10pct,0.50,,,,,,,,,,,,,,,
+run_008,50,split_B,multitask,transformer,120,traffic_env,missing_10pct,0.50,,,,,,,,,,,,,,,
+run_009,51,split_C,multitask,lstm,300,full,nominal,0.50,,,,,,,,,,,,,,,
+run_010,51,split_C,multitask,transformer,300,full,nominal,0.50,,,,,,,,,,,,,,,

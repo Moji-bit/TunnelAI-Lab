@@ -1,0 +1,13 @@
+{
+  "scenario_dir": "scenarios",
+  "output_dir": "data/raw",
+  "start_time_iso": "2026-01-01T08:00:00+01:00",
+  "max_seconds": 900,
+  "scenarios": [
+    "stau_case_00.json",
+    "stau_case_01.json",
+    "stau_case_02.json",
+    "stau_case_03.json"
+  ],
+  "seeds": [42, 43, 50, 51, 60]
+}
