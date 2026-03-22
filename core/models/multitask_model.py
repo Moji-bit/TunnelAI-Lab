@@ -2,11 +2,11 @@
 import torch
 import torch.nn as nn
 
-from models.bachbone.transformer import TransformerBackbone
-from models.bachbone.lstm import LSTMBackbone
-from models.heads.forecasting import ForecastHead
-from models.heads.event import EventHead
-from models.heads.risk import RiskHead
+from core.models.bachbone.transformer import TransformerBackbone
+from core.models.bachbone.lstm import LSTMBackbone
+from core.models.heads.forecasting import ForecastHead
+from core.models.heads.event import EventHead
+from core.models.heads.risk import RiskHead
 
 class MultiTaskModel(nn.Module):
     def __init__(
