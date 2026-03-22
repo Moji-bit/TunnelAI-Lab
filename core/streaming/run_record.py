@@ -24,8 +24,8 @@ if __package__ is None or __package__ == "":
     sys.path.insert(0, BASE_DIR)
 
 from core.streaming.opcua_mock_server import generate_stream
-from streaming.recorder import write_long_csv
-from sim.event_generator import Scenario
+from core.streaming.recorder import write_long_csv
+from core.sim.event_generator import Scenario
 
 
 def _resolve_path(path: str | None) -> str | None:
