@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 
-ALLOWED_INPUT_FORMATS = {"long_tag_csv", "scenario_csv", "wide_csv"}
+ALLOWED_INPUT_FORMATS = {"long_tag_csv", "scenario_csv"}
 
 DEFAULT_FEATURE_TAGS = [
     "Z2.TRAF.Speed",
@@ -71,7 +71,7 @@ class DatasetConfig:
     stride: int = 5
 
     # Input mode
-    input_format: str = "long_tag_csv"  # allowed: long_tag_csv, scenario_csv, wide_csv
+    input_format: str = "long_tag_csv"  # allowed: long_tag_csv, scenario_csv
 
     # Long-tag mode columns
     feature_tags: List[str] | None = None
@@ -87,7 +87,6 @@ class DatasetConfig:
     risk_level_col: str = "risk_level"
     scenario_dynamic_features: List[str] | None = None
     scenario_static_features: List[str] | None = None
-    wide_csv_exclude_cols: List[str] | None = None
 
     # Splitting
     train_frac: float = 0.7
@@ -401,105 +400,6 @@ def make_windows_scenario_csv(df: pd.DataFrame, cfg: DatasetConfig) -> Dict[str,
     }
 
 
-def make_windows_wide_csv(df: pd.DataFrame, cfg: DatasetConfig) -> Dict[str, object]:
-    """Build windows from wide CSV rows using all numeric columns (except excluded columns)."""
-    if cfg.scenario_id_col not in df.columns:
-        raise ValueError(f"wide_csv missing required column: {cfg.scenario_id_col}")
-    if cfg.timestamp_col not in df.columns:
-        raise ValueError(f"wide_csv missing required column: {cfg.timestamp_col}")
-    if "event_type_code" not in df.columns and cfg.event_type_col not in df.columns:
-        raise ValueError("wide_csv requires 'event_type_code' or 'event_type' column")
-
-    excluded = set(cfg.wide_csv_exclude_cols or [])
-    excluded |= {cfg.scenario_id_col, cfg.timestamp_col, cfg.event_type_col, "event_type_code", cfg.risk_level_col}
-
-    if "event_type_code" in df.columns:
-        y_codes = pd.to_numeric(df["event_type_code"], errors="coerce")
-    else:
-        event_mapping, _ = _event_mapping(df[cfg.event_type_col].astype(str).tolist())
-        y_codes = df[cfg.event_type_col].map(lambda x: event_mapping[_normalize_event_type(x)])
-
-    numeric_cols = [c for c in df.columns if c not in excluded and pd.api.types.is_numeric_dtype(df[c])]
-    if not numeric_cols:
-        raise ValueError("wide_csv found no usable numeric feature columns")
-
-    class_names_arr: np.ndarray
-    if cfg.event_type_col in df.columns:
-        norm_events = df[cfg.event_type_col].map(_normalize_event_type)
-        uniq_codes = sorted(pd.to_numeric(y_codes, errors="coerce").dropna().astype(int).unique().tolist())
-        max_id = max(uniq_codes) if uniq_codes else 0
-        class_names = [f"class_{i}" for i in range(max_id + 1)]
-        for _, row in pd.DataFrame({"code": y_codes, "name": norm_events}).dropna().iterrows():
-            c = int(row["code"])
-            if c >= len(class_names):
-                class_names.extend([f"class_{i}" for i in range(len(class_names), c + 1)])
-            class_names[c] = str(row["name"])
-        class_names_arr = np.array(class_names, dtype=str)
-    else:
-        uniq_codes = sorted(pd.to_numeric(y_codes, errors="coerce").dropna().astype(int).unique().tolist())
-        class_names_arr = np.array([f"class_{c}" for c in uniq_codes], dtype=str)
-
-    X_list: List[np.ndarray] = []
-    Y_list: List[int] = []
-    ts_list: List[np.int64] = []
-    sid_list: List[str] = []
-
-    df_local = df.copy()
-    df_local["_event_code"] = pd.to_numeric(y_codes, errors="coerce")
-    df_local[cfg.timestamp_col] = pd.to_datetime(df_local[cfg.timestamp_col], errors="coerce")
-
-    for sid, block in df_local.groupby(cfg.scenario_id_col):
-        block = block.sort_values(cfg.timestamp_col)
-        feat = block[numeric_cols].apply(pd.to_numeric, errors="coerce")
-        ev = block["_event_code"]
-        ts = block[cfg.timestamp_col]
-
-        ok = feat.notna().all(axis=1) & ev.notna() & ts.notna()
-        feat = feat[ok]
-        ev = ev[ok].astype(int)
-        ts = ts[ok].astype(np.int64)
-
-        if len(feat) < cfg.L:
-            continue
-
-        feat_np = feat.to_numpy(dtype=np.float32)
-        ev_np = ev.to_numpy(dtype=np.int64)
-        ts_np = ts.to_numpy(dtype=np.int64)
-
-        max_start = len(feat_np) - cfg.L + 1
-        for start in range(0, max_start, cfg.stride):
-            end_x = start + cfg.L
-            X_list.append(feat_np[start:end_x, :])
-            Y_list.append(int(ev_np[end_x - 1]))
-            ts_list.append(int(ts_np[end_x - 1]))
-            sid_list.append(str(sid))
-
-    if not X_list:
-        raise RuntimeError("No windows generated from wide_csv. Check L/stride and data completeness.")
-
-    X = np.stack(X_list).astype(np.float32)
-    Y_event_cls = np.array(Y_list, dtype=np.int64)
-
-    meta = {
-        "feature_names": np.array(numeric_cols, dtype=str),
-        "forecast_targets": np.array([], dtype=str),
-        "event_class_names": class_names_arr,
-        "timestamps": np.array(ts_list, dtype=np.int64),
-        "scenario_ids": np.array(sid_list, dtype=str),
-        "L": np.array([cfg.L], dtype=np.int64),
-        "H": np.array([cfg.H], dtype=np.int64),
-        "stride": np.array([cfg.stride], dtype=np.int64),
-    }
-
-    return {
-        "X": X,
-        "Y_event_cls": Y_event_cls,
-        "Y_event": (Y_event_cls > 0).astype(np.float32),
-        "Y_forecast": None,
-        "meta": meta,
-    }
-
-
 def split_by_scenario(data: Dict[str, object], cfg: DatasetConfig):
     """Split by scenario_id to avoid leakage across train/val/test."""
     sids = data["meta"]["scenario_ids"]
@@ -586,7 +486,7 @@ def _build_data_from_input(csv_path: str, cfg: DatasetConfig) -> Dict[str, objec
         wide = pivot_to_wide(df_long)
         return make_windows_long(wide, cfg)
 
-    # scenario_csv / wide_csv mode expects a directory of scenario csv files OR one csv file
+    # scenario_csv mode expects a directory of scenario csv files OR one csv file
     p = Path(csv_path)
     if p.is_dir():
         df = load_scenario_csv_dir(str(p), scenario_id_col=cfg.scenario_id_col)
@@ -594,8 +494,6 @@ def _build_data_from_input(csv_path: str, cfg: DatasetConfig) -> Dict[str, objec
         df = pd.read_csv(p)
         if cfg.scenario_id_col not in df.columns:
             df[cfg.scenario_id_col] = p.stem
-    if cfg.input_format == "wide_csv":
-        return make_windows_wide_csv(df, cfg)
     return make_windows_scenario_csv(df, cfg)
 
 
