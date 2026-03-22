@@ -3,9 +3,24 @@ from __future__ import annotations
 
 import math
 
+try:
+    from sklearn.metrics import (
+        accuracy_score as _sk_accuracy_score,
+        classification_report as _sk_classification_report,
+        confusion_matrix as _sk_confusion_matrix,
+        precision_recall_fscore_support as _sk_prfs,
+    )
+    _HAS_SKLEARN = True
+except Exception:
+    _HAS_SKLEARN = False
+
 
 def _to_float_list(xs):
     return [float(x) for x in xs]
+
+
+def _to_int_list(xs):
+    return [int(float(x)) for x in xs]
 
 
 def mae(y_true, y_pred) -> float:
@@ -37,6 +52,144 @@ def precision_recall_f1(y_true_bin, y_pred_bin):
     f1 = 2 * prec * rec / (prec + rec + eps)
     far = fp / (fp + tn + eps)
     return {"precision": prec, "recall": rec, "f1": f1, "far": far, "tp": tp, "fp": fp, "fn": fn, "tn": tn}
+
+
+def confusion_matrix_multiclass(y_true, y_pred, labels=None):
+    yt = _to_int_list(y_true)
+    yp = _to_int_list(y_pred)
+    if labels is None:
+        labels = sorted(set(yt) | set(yp))
+    labels = [int(l) for l in labels]
+
+    if _HAS_SKLEARN:
+        cm = _sk_confusion_matrix(yt, yp, labels=labels)
+        return cm.tolist()
+
+    idx = {label: i for i, label in enumerate(labels)}
+    cm = [[0 for _ in labels] for _ in labels]
+    for a, b in zip(yt, yp):
+        if a in idx and b in idx:
+            cm[idx[a]][idx[b]] += 1
+    return cm
+
+
+def accuracy_multiclass(y_true, y_pred) -> float:
+    yt = _to_int_list(y_true)
+    yp = _to_int_list(y_pred)
+    if not yt:
+        return 0.0
+    if _HAS_SKLEARN:
+        return float(_sk_accuracy_score(yt, yp))
+    correct = sum(1 for a, b in zip(yt, yp) if a == b)
+    return float(correct / len(yt))
+
+
+def precision_recall_f1_multiclass(y_true, y_pred, labels=None):
+    yt = _to_int_list(y_true)
+    yp = _to_int_list(y_pred)
+    if labels is None:
+        labels = sorted(set(yt) | set(yp))
+    labels = [int(l) for l in labels]
+
+    if _HAS_SKLEARN:
+        p, r, f1, s = _sk_prfs(yt, yp, labels=labels, average=None, zero_division=0)
+        p_macro, r_macro, f1_macro, _ = _sk_prfs(yt, yp, labels=labels, average="macro", zero_division=0)
+        return {
+            "labels": labels,
+            "precision_per_class": [float(x) for x in p.tolist()],
+            "recall_per_class": [float(x) for x in r.tolist()],
+            "f1_per_class": [float(x) for x in f1.tolist()],
+            "support_per_class": [int(x) for x in s.tolist()],
+            "precision_macro": float(p_macro),
+            "recall_macro": float(r_macro),
+            "f1_macro": float(f1_macro),
+        }
+
+    cm = confusion_matrix_multiclass(yt, yp, labels=labels)
+    n = len(labels)
+    precision = []
+    recall = []
+    f1 = []
+    support = []
+    eps = 1e-9
+    for i in range(n):
+        tp = cm[i][i]
+        fp = sum(cm[r][i] for r in range(n) if r != i)
+        fn = sum(cm[i][c] for c in range(n) if c != i)
+        sup = sum(cm[i])
+        p_i = tp / (tp + fp + eps)
+        r_i = tp / (tp + fn + eps)
+        f_i = 2 * p_i * r_i / (p_i + r_i + eps)
+        precision.append(p_i)
+        recall.append(r_i)
+        f1.append(f_i)
+        support.append(sup)
+
+    return {
+        "labels": labels,
+        "precision_per_class": precision,
+        "recall_per_class": recall,
+        "f1_per_class": f1,
+        "support_per_class": support,
+        "precision_macro": sum(precision) / max(1, n),
+        "recall_macro": sum(recall) / max(1, n),
+        "f1_macro": sum(f1) / max(1, n),
+    }
+
+
+def classification_report_dict(y_true, y_pred, labels=None, target_names=None):
+    yt = _to_int_list(y_true)
+    yp = _to_int_list(y_pred)
+    if labels is None:
+        labels = sorted(set(yt) | set(yp))
+    labels = [int(l) for l in labels]
+
+    if _HAS_SKLEARN:
+        rep = _sk_classification_report(
+            yt,
+            yp,
+            labels=labels,
+            target_names=target_names,
+            output_dict=True,
+            zero_division=0,
+        )
+        return rep
+
+    stats = precision_recall_f1_multiclass(yt, yp, labels=labels)
+    out = {}
+    names = target_names if target_names is not None else [str(l) for l in labels]
+    for i, name in enumerate(names):
+        out[name] = {
+            "precision": float(stats["precision_per_class"][i]),
+            "recall": float(stats["recall_per_class"][i]),
+            "f1-score": float(stats["f1_per_class"][i]),
+            "support": int(stats["support_per_class"][i]),
+        }
+
+    total_support = sum(stats["support_per_class"])
+    weighted_f1 = 0.0
+    weighted_p = 0.0
+    weighted_r = 0.0
+    for i in range(len(names)):
+        w = stats["support_per_class"][i] / max(1, total_support)
+        weighted_p += w * stats["precision_per_class"][i]
+        weighted_r += w * stats["recall_per_class"][i]
+        weighted_f1 += w * stats["f1_per_class"][i]
+
+    out["accuracy"] = accuracy_multiclass(yt, yp)
+    out["macro avg"] = {
+        "precision": float(stats["precision_macro"]),
+        "recall": float(stats["recall_macro"]),
+        "f1-score": float(stats["f1_macro"]),
+        "support": int(total_support),
+    }
+    out["weighted avg"] = {
+        "precision": float(weighted_p),
+        "recall": float(weighted_r),
+        "f1-score": float(weighted_f1),
+        "support": int(total_support),
+    }
+    return out
 
 
 def brier_score(y_true_bin, y_prob):
