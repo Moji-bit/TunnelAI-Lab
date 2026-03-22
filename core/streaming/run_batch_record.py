@@ -3,11 +3,12 @@ import glob
 import os
 import sys
 
-BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+CORE_DIR = os.path.dirname(os.path.dirname(__file__))
+BASE_DIR = os.path.dirname(CORE_DIR)
 if __package__ is None or __package__ == "":
     sys.path.insert(0, BASE_DIR)
 
-from streaming.run_record import record_to_csv, load_scenario
+from core.streaming.run_record import record_to_csv, load_scenario
 
 
 def _resolve_path(path: str) -> str:
