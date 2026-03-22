@@ -19,13 +19,13 @@ from datetime import datetime
 from typing import List, Tuple
 
 # Make repository root importable when this file is executed directly.
-BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 if __package__ is None or __package__ == "":
     sys.path.insert(0, BASE_DIR)
 
-from streaming.opcua_mock_server import generate_stream
-from streaming.recorder import write_long_csv
-from sim.event_generator import Scenario
+from core.streaming.opcua_mock_server import generate_stream
+from core.streaming.recorder import write_long_csv
+from core.sim.event_generator import Scenario
 
 
 def _resolve_path(path: str | None) -> str | None:

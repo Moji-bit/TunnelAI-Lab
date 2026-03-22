@@ -122,13 +122,13 @@ pip install numpy pandas matplotlib streamlit pyyaml torch
 ### Run single scenario
 
 ```bash
-python streaming/run_record.py --scenario scenarios/example.json --out data/raw/output.csv
+python core/streaming/run_record.py --scenario scenarios/example.json --out data/raw/output.csv
 ```
 
 ### Run batch of scenarios
 
 ```bash
-python streaming/run_batch_record.py
+python core/streaming/run_batch_record.py
 ```
 
 ---
@@ -136,7 +136,7 @@ python streaming/run_batch_record.py
 ## 📊 Launch Dashboard
 
 ```bash
-streamlit run ui/dashboard.py
+streamlit run apps/ui/dashboard.py
 ```
 
 ---
