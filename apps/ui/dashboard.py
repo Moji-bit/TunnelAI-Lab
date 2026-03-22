@@ -11,14 +11,11 @@ Main capabilities:
 This file intentionally keeps UI logic in one place for readability during thesis work.
 """
 
-# ui/dashboard.py
 from __future__ import annotations
 
 import os
 import sys
 import time
-import requests
-
 from datetime import datetime
 from typing import List, Optional
 
@@ -27,26 +24,24 @@ import streamlit as st
 import yaml
 
 # ensure repo root is importable when Streamlit launches from nested paths
-BASE_DIR = os.path.dirname(os.path.dirname(__file__))
-if BASE_DIR not in sys.path:
-    sys.path.insert(0, BASE_DIR)
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
 
-from streaming.run_record import load_scenario, record_to_csv
+from core.streaming.run_record import load_scenario, record_to_csv
 
 
 # -------------------------
 # Paths / Constants
 # -------------------------
-BASE_DIR = os.path.dirname(os.path.dirname(__file__))
-SCENARIO_DIR = os.path.join(BASE_DIR, "scenarios")
-RAW_DIR = os.path.join(BASE_DIR, "data", "raw")
-TAGS_YAML = os.path.join(BASE_DIR, "tags", "tags.yaml")
+SCENARIO_DIR = os.path.join(REPO_ROOT, "scenarios")
+RAW_DIR = os.path.join(REPO_ROOT, "data", "raw")
+TAGS_YAML = os.path.join(REPO_ROOT, "core", "tags", "tags.yaml")
 
 DEFAULT_START = "2026-01-01T08:00:00+01:00"
 DEFAULT_MAX_SECONDS = 300  # Quick demo; set None for full duration
 
 CRIT_WEIGHT = {"low": 1, "medium": 2, "high": 3, "critical": 4}
-BACKEND_BASE_URL = os.getenv("TUNNEL_BACKEND_URL", "http://127.0.0.1:8000")
 
 
 # -------------------------
@@ -156,7 +151,7 @@ with st.sidebar:
 
     scenarios = list_json_files(SCENARIO_DIR)
     if not scenarios:
-        st.error(f"Keine Szenario-JSONs gefunden in: {os.path.relpath(SCENARIO_DIR, BASE_DIR)}")
+        st.error(f"Keine Szenario-JSONs gefunden in: {os.path.relpath(SCENARIO_DIR, REPO_ROOT)}")
         st.stop()
 
     selected_scn = st.selectbox("Szenario wählen", scenarios, index=0)
@@ -179,7 +174,7 @@ with st.sidebar:
         step=1,
         help="Gleicher Seed => gleiche CSV. Anderer Seed => neue, aber reproduzierbare Variante.",
     )
-    
+
     run_btn = st.button("▶️ Run Scenario → CSV erzeugen", use_container_width=True)
 
     st.markdown("---")
@@ -211,8 +206,6 @@ st.session_state.setdefault("last_csv_path", None)
 st.session_state.setdefault("wide", None)
 st.session_state.setdefault("long", None)
 st.session_state.setdefault("status_by_ts", None)
-st.session_state.setdefault("backend_session_id", None)
-st.session_state.setdefault("backend_last_frame", None)
 
 
 # -------------------------
@@ -258,7 +251,6 @@ if selected_csv:
         st.session_state.i = 0
 
 
-df_long: Optional[pd.DataFrame] = st.session_state.long
 df_wide: Optional[pd.DataFrame] = st.session_state.wide
 status_by_ts: Optional[pd.DataFrame] = st.session_state.status_by_ts
 
@@ -285,13 +277,15 @@ with st.sidebar:
     zone_sel = st.multiselect("Zone", zones, default=zones)
     subs_sel = st.multiselect("Subsystem", subs, default=subs)
 
-    segs = sorted({
-        p
-        for t in available_tags
-        for p in t.split(".")
-        if p.startswith("S") and len(p) == 3
-    })
-    
+    segs = sorted(
+        {
+            p
+            for t in available_tags
+            for p in t.split(".")
+            if p.startswith("S") and len(p) == 3
+        }
+    )
+
     seg_sel = st.multiselect("Segment", segs, default=segs)
 
     selected_tags = []
@@ -317,53 +311,12 @@ with st.sidebar:
 # Playback controls
 # -------------------------
 if start_play:
-    try:
-        if not st.session_state.backend_session_id:
-            resp = requests.post(
-                f"{BACKEND_BASE_URL}/api/playback/session",
-                json={"scenario_id": os.path.splitext(selected_scn)[0]},
-                timeout=3,
-            )
-            resp.raise_for_status()
-            st.session_state.backend_session_id = resp.json()["session_id"]
-
-        requests.post(
-            f"{BACKEND_BASE_URL}/api/playback/session/{st.session_state.backend_session_id}/control",
-            json={"cmd": "play"},
-            timeout=3,
-        ).raise_for_status()
-        st.session_state.playing = True
-    except Exception as ex:
-        st.error(f"Backend-Playback konnte nicht gestartet werden: {ex}")
+    st.session_state.playing = True
 if pause_play:
     st.session_state.playing = False
-    if st.session_state.backend_session_id:
-        try:
-            requests.post(
-                f"{BACKEND_BASE_URL}/api/playback/session/{st.session_state.backend_session_id}/control",
-                json={"cmd": "pause"},
-                timeout=3,
-            )
-        except Exception:
-            pass
 if reset_play:
     st.session_state.playing = False
     st.session_state.i = 0
-    st.session_state.backend_last_frame = None
-    if st.session_state.backend_session_id:
-        try:
-            requests.post(
-                f"{BACKEND_BASE_URL}/api/playback/session/{st.session_state.backend_session_id}/control",
-                json={"cmd": "seek", "t": 0},
-                timeout=3,
-            )
-            requests.post(
-                f"{BACKEND_BASE_URL}/api/playback/session/{st.session_state.backend_session_id}/control",
-                json={"cmd": "pause"},
-                timeout=3,
-            )
-        except Exception:
-            pass
 
 
 # -------------------------
@@ -391,18 +344,16 @@ def render_frame(i: int) -> None:
     start_i = max(0, i - window)
 
     view = df_wide.iloc[start_i : i + 1].copy()
-    current = df_wide.iloc[i, :]  # <- Series
+    current = df_wide.iloc[i, :]
 
     # Chart (selected signals)
     plot_df = view[chart_tags] if chart_tags else view.iloc[:, :8]
-    # Normalize chart input to avoid Altair/jsonschema recursion issues with mixed dtypes/index objects.
     plot_df = plot_df.apply(pd.to_numeric, errors="coerce")
     plot_df = plot_df.replace([float("inf"), float("-inf")], pd.NA).dropna(axis=1, how="all")
 
     if plot_df.empty:
         chart_area.info("Keine numerischen Werte für die aktuelle Auswahl vorhanden.")
     else:
-        # Use simple RangeIndex to keep the backend payload strictly tabular/numeric.
         chart_area.line_chart(plot_df.reset_index(drop=True))
 
     # Table (nur sichtbare/ausgewählte Spalten, um UI-Lag zu reduzieren)
@@ -420,15 +371,15 @@ def render_frame(i: int) -> None:
 
     status_area.markdown(
         f"""
-        **Timestamp:** `{ts}`  
-        **Scenario:** `{scenario_id}`  
+        **Timestamp:** `{ts}`
+        **Scenario:** `{scenario_id}`
         **Quality:** `{quality}`
         """
     )
 
     # Top-Tags by (criticality + limit proximity)
     rows = []
-    for t in plot_df.columns:  # nur die angezeigten Tags bewerten
+    for t in plot_df.columns:
         meta = tag_idx.get(t)
         if meta is None:
             continue
@@ -471,33 +422,8 @@ def render_frame(i: int) -> None:
 # -------------------------
 render_frame(st.session_state.i)
 
-if st.session_state.backend_session_id:
-    st.info(
-        "🔗 Frontend Sync: Öffne das Web-Frontend mit URL-Parameter `?session_id="
-        f"{st.session_state.backend_session_id}` um denselben Playback-Stream zu sehen."
-    )
-
-if st.session_state.playing and st.session_state.backend_session_id:
-    try:
-        frame_resp = requests.post(
-            f"{BACKEND_BASE_URL}/api/playback/session/{st.session_state.backend_session_id}/frame",
-            timeout=3,
-        )
-        frame_resp.raise_for_status()
-        st.session_state.backend_last_frame = frame_resp.json()
-
-        with right:
-            st.markdown("---")
-            st.subheader("🚗 Backend-Frame (für Frontend + Dashboard)")
-            frame = st.session_state.backend_last_frame
-            st.write(f"Session: `{st.session_state.backend_session_id}`")
-            st.write(f"t={frame.get('t', 0):.1f}s | Fahrzeuge={len(frame.get('vehicles', []))}")
-            st.dataframe(pd.DataFrame(frame.get("vehicles", [])).head(12), use_container_width=True)
-    except Exception as ex:
-        st.warning(f"Backend-Frame konnte nicht geladen werden: {ex}")
-
 if st.session_state.playing:
-    interval_ms = max(800, int(1000 / play_speed))  # langsameres Tick-Tempo reduziert Blinken/Frieren
+    interval_ms = max(800, int(1000 / play_speed))
     time.sleep(interval_ms / 1000.0)
 
     if st.session_state.i < len(df_wide) - 1:
