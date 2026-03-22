@@ -40,6 +40,9 @@ def main() -> None:
     scenario_dir = resolve_path(plan["scenario_dir"])
     out_dir = resolve_path(plan["output_dir"])
     out_dir.mkdir(parents=True, exist_ok=True)
+    exact_out_dir = resolve_path(plan["exact_output_dir"]) if plan.get("exact_output_dir") else None
+    if exact_out_dir is not None:
+        exact_out_dir.mkdir(parents=True, exist_ok=True)
 
     scenarios = list(plan.get("scenarios", []))
     seeds = [int(s) for s in plan.get("seeds", [42])]
@@ -77,6 +80,14 @@ def main() -> None:
                 start_time_iso=start_time,
                 max_seconds=(int(max_seconds) if max_seconds is not None else None),
             )
+            if exact_out_dir is not None:
+                exact_out = exact_out_dir / out_csv.name
+                record_to_exact_csv(
+                    scenario=scn,
+                    out_csv=str(exact_out),
+                    start_time_iso=start_time,
+                    max_seconds=(int(max_seconds) if max_seconds is not None else None),
+                )
 
 
 if __name__ == "__main__":

@@ -3,7 +3,8 @@ import glob
 import os
 import sys
 
-BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+CORE_DIR = os.path.dirname(os.path.dirname(__file__))
+BASE_DIR = os.path.dirname(CORE_DIR)
 if __package__ is None or __package__ == "":
     sys.path.insert(0, BASE_DIR)
 
