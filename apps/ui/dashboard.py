@@ -22,6 +22,8 @@ from typing import List, Optional
 import pandas as pd
 import streamlit as st
 import yaml
+import torch
+import torch.nn as nn
 
 # ensure repo root is importable when Streamlit launches from nested paths
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
@@ -42,6 +44,59 @@ DEFAULT_START = "2026-01-01T08:00:00+01:00"
 DEFAULT_MAX_SECONDS = 300  # Quick demo; set None for full duration
 
 CRIT_WEIGHT = {"low": 1, "medium": 2, "high": 3, "critical": 4}
+
+
+class LSTMClassifier(nn.Module):
+    def __init__(self, d_in: int, d_model: int, n_layers: int, n_classes: int):
+        super().__init__()
+        self.lstm = nn.LSTM(
+            input_size=d_in,
+            hidden_size=d_model,
+            num_layers=n_layers,
+            batch_first=True,
+            dropout=0.1 if n_layers > 1 else 0.0,
+        )
+        self.head = nn.Linear(d_model, n_classes)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        h, _ = self.lstm(x)
+        return self.head(h[:, -1, :])
+
+
+class TransformerClassifier(nn.Module):
+    def __init__(self, d_in: int, d_model: int, n_layers: int, n_heads: int, n_classes: int):
+        super().__init__()
+        self.in_proj = nn.Linear(d_in, d_model)
+        enc_layer = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=n_heads,
+            dim_feedforward=d_model * 4,
+            dropout=0.1,
+            batch_first=True,
+            activation="gelu",
+        )
+        self.encoder = nn.TransformerEncoder(enc_layer, num_layers=n_layers)
+        self.head = nn.Linear(d_model, n_classes)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        z = self.in_proj(x)
+        h = self.encoder(z)
+        return self.head(h[:, -1, :])
+
+
+@st.cache_resource(show_spinner=False)
+def load_ai_model(model_path: str):
+    ckpt = torch.load(model_path, map_location="cpu")
+    backbone = ckpt.get("backbone", "lstm")
+    d_in = int(ckpt.get("d_in", 1))
+    n_classes = int(ckpt.get("n_classes", 2))
+    if backbone == "transformer":
+        model = TransformerClassifier(d_in=d_in, d_model=128, n_layers=2, n_heads=4, n_classes=n_classes)
+    else:
+        model = LSTMClassifier(d_in=d_in, d_model=128, n_layers=2, n_classes=n_classes)
+    model.load_state_dict(ckpt["model_state_dict"])
+    model.eval()
+    return model, ckpt
 
 
 # -------------------------
@@ -196,6 +251,12 @@ with st.sidebar:
     pause_play = c2.button("⏸️ Pause")
     reset_play = c3.button("🔄 Reset")
 
+    st.markdown("---")
+    st.header("🤖 AI Prediction Mode")
+    ai_mode = st.toggle("AI live prediction", value=False)
+    model_path = st.text_input("Model path", value=os.path.join(REPO_ROOT, "artifacts", "best_model.pt"))
+    ai_window = st.number_input("AI window size (L)", min_value=5, max_value=5000, value=60, step=5)
+
 
 # -------------------------
 # Session state init
@@ -332,6 +393,7 @@ with left:
 with right:
     st.subheader("🧾 Status / Info")
     status_area = st.empty()
+    ai_area = st.empty()
     tags_area = st.empty()
     st.markdown("---")
     st.write(f"CSV: `{os.path.basename(st.session_state.last_csv_path)}`")
@@ -376,6 +438,50 @@ def render_frame(i: int) -> None:
         **Quality:** `{quality}`
         """
     )
+
+    # AI live prediction
+    if ai_mode:
+        if not os.path.isfile(model_path):
+            ai_area.warning(f"Model nicht gefunden: {model_path}")
+        else:
+            try:
+                model, ckpt = load_ai_model(model_path)
+                feature_names = [str(x) for x in ckpt.get("feature_names", [])]
+                class_names = [str(x) for x in ckpt.get("event_class_names", [])]
+                if not feature_names:
+                    ai_area.warning("Im Modell keine feature_names gespeichert.")
+                else:
+                    end_i = i + 1
+                    start_ai = max(0, end_i - int(ai_window))
+                    block = df_wide.iloc[start_ai:end_i]
+                    if len(block) < int(ai_window):
+                        ai_area.info(f"AI wartet auf genug Samples ({len(block)}/{int(ai_window)}).")
+                    else:
+                        use_feats = [f for f in feature_names if f in block.columns]
+                        if len(use_feats) != len(feature_names):
+                            missing = sorted(set(feature_names) - set(use_feats))
+                            ai_area.warning(f"Fehlende Feature-Spalten: {missing[:6]}")
+                        if not use_feats:
+                            ai_area.error("Keine passenden Modell-Features in der CSV.")
+                        else:
+                            x_np = block[use_feats].apply(pd.to_numeric, errors="coerce").fillna(0.0).to_numpy(dtype="float32")
+                            if x_np.shape[1] != int(ckpt.get("d_in", x_np.shape[1])):
+                                ai_area.error("Feature-Dimension passt nicht zum Modell.")
+                            else:
+                                x_t = torch.from_numpy(x_np).unsqueeze(0)
+                                with torch.no_grad():
+                                    logits = model(x_t)
+                                    probs = torch.softmax(logits, dim=1).cpu().numpy()[0]
+                                pred_idx = int(probs.argmax())
+                                conf = float(probs[pred_idx])
+                                pred_name = class_names[pred_idx] if pred_idx < len(class_names) else str(pred_idx)
+                                risk_high = pred_name not in {"normal", "none", "0"} and conf >= 0.5
+                                if risk_high:
+                                    ai_area.error(f"⚠️ Predicted Event: **{pred_name}** | Confidence: **{conf:.2%}**")
+                                else:
+                                    ai_area.success(f"Predicted Event: **{pred_name}** | Confidence: **{conf:.2%}**")
+            except Exception as e:
+                ai_area.error(f"AI Prediction Fehler: {e}")
 
     # Top-Tags by (criticality + limit proximity)
     rows = []
