@@ -1,0 +1,198 @@
+"""apps/ai_page.py
+
+Streamlit page for end-to-end AI workflow in TunnelAI-Lab:
+1) Dataset Builder
+2) Training
+3) Evaluation
+4) Model Test
+"""
+
+from __future__ import annotations
+
+import os
+import shlex
+import subprocess
+import sys
+from datetime import datetime
+from typing import List, Tuple
+
+import streamlit as st
+
+# Ensure repo root import path when launched from nested cwd
+REPO_ROOT = os.path.dirname(os.path.dirname(__file__))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
+RAW_DIR = os.path.join(REPO_ROOT, "data", "raw")
+PROC_DIR = os.path.join(REPO_ROOT, "data", "processed")
+SCENARIO_DIR = os.path.join(REPO_ROOT, "scenarios")
+ART_DIR = os.path.join(REPO_ROOT, "artifacts")
+
+
+def _run_cmd(cmd: List[str]) -> Tuple[int, str]:
+    proc = subprocess.run(
+        cmd,
+        cwd=REPO_ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+    )
+    return proc.returncode, proc.stdout
+
+
+def _list_files(folder: str, suffix: str) -> List[str]:
+    if not os.path.isdir(folder):
+        return []
+    files = [f for f in os.listdir(folder) if f.lower().endswith(suffix.lower())]
+    files.sort()
+    return files
+
+
+st.set_page_config(page_title="TunnelAI-Lab – AI Page", layout="wide")
+st.title("🤖 TunnelAI-Lab – AI Workflow")
+st.caption("Dataset Builder • Training • Evaluation • Model Test")
+
+with st.sidebar:
+    st.header("📁 Paths")
+    st.code(f"RAW_DIR = {RAW_DIR}")
+    st.code(f"PROC_DIR = {PROC_DIR}")
+    st.code(f"ART_DIR = {ART_DIR}")
+
+
+# -----------------------------------------------------------------------------
+# Dataset Builder
+# -----------------------------------------------------------------------------
+st.header("1) Dataset Builder")
+with st.container(border=True):
+    c1, c2, c3, c4 = st.columns(4)
+    input_format = c1.selectbox("input_format", ["wide_csv", "scenario_csv", "long_tag_csv"], index=0)
+    L = c2.number_input("L (window size)", min_value=5, max_value=5000, value=60, step=5)
+    H = c3.number_input("H (forecast horizon)", min_value=1, max_value=1000, value=1, step=1)
+    stride = c4.number_input("stride", min_value=1, max_value=200, value=5, step=1)
+
+    csv_or_dir_default = RAW_DIR if input_format in {"wide_csv", "scenario_csv"} else os.path.join(RAW_DIR, "stau_run_long.csv")
+    csv_or_dir = st.text_input("CSV path or directory", value=csv_or_dir_default)
+    out_dir = st.text_input("Output directory", value=PROC_DIR)
+
+    if st.button("🧱 Build NPZ", use_container_width=True):
+        py = (
+            "from core.dataset.dataset_builder import DatasetConfig, build_npz_from_csv;"
+            f"cfg=DatasetConfig(input_format='{input_format}',L={int(L)},H={int(H)},stride={int(stride)});"
+            f"build_npz_from_csv(csv_path={csv_or_dir!r}, out_dir={out_dir!r}, cfg=cfg)"
+        )
+        code, out = _run_cmd([sys.executable, "-c", py])
+        if code == 0:
+            st.success("NPZ build finished.")
+        else:
+            st.error("NPZ build failed.")
+        st.code(out)
+
+
+# -----------------------------------------------------------------------------
+# Training
+# -----------------------------------------------------------------------------
+st.header("2) Training")
+with st.container(border=True):
+    c1, c2, c3, c4 = st.columns(4)
+    epochs = c1.number_input("epochs", min_value=1, max_value=1000, value=20)
+    batch_size = c2.number_input("batch_size", min_value=1, max_value=2048, value=64)
+    lr = c3.number_input("lr", min_value=1e-6, max_value=1.0, value=1e-3, format="%.6f")
+    backbone = c4.selectbox("backbone", ["lstm", "transformer"], index=0)
+
+    train_npz = st.text_input("train.npz", value=os.path.join(PROC_DIR, "train.npz"))
+    val_npz = st.text_input("val.npz", value=os.path.join(PROC_DIR, "val.npz"))
+    test_npz = st.text_input("test.npz", value=os.path.join(PROC_DIR, "test.npz"))
+    save_dir = st.text_input("save_dir", value=ART_DIR)
+
+    if st.button("🏋️ Train Model", use_container_width=True):
+        cmd = [
+            sys.executable,
+            os.path.join("scripts", "train_event_model.py"),
+            "--train", train_npz,
+            "--val", val_npz,
+            "--test", test_npz,
+            "--epochs", str(int(epochs)),
+            "--batch_size", str(int(batch_size)),
+            "--lr", str(float(lr)),
+            "--backbone", backbone,
+            "--save_dir", save_dir,
+        ]
+        code, out = _run_cmd(cmd)
+        if code == 0:
+            st.success("Training finished.")
+        else:
+            st.error("Training failed.")
+        st.code(out)
+
+
+# -----------------------------------------------------------------------------
+# Evaluation
+# -----------------------------------------------------------------------------
+st.header("3) Evaluation")
+with st.container(border=True):
+    report_out = st.text_input("dataset report JSON", value=os.path.join(PROC_DIR, "dataset_report.json"))
+    eval_train = st.text_input("eval train.npz", value=os.path.join(PROC_DIR, "train.npz"), key="eval_train")
+    eval_val = st.text_input("eval val.npz", value=os.path.join(PROC_DIR, "val.npz"), key="eval_val")
+    eval_test = st.text_input("eval test.npz", value=os.path.join(PROC_DIR, "test.npz"), key="eval_test")
+
+    if st.button("📊 Analyze Dataset", use_container_width=True):
+        cmd = [
+            sys.executable,
+            os.path.join("scripts", "analyze_dataset.py"),
+            "--train", eval_train,
+            "--val", eval_val,
+            "--test", eval_test,
+            "--out", report_out,
+        ]
+        code, out = _run_cmd(cmd)
+        if code == 0:
+            st.success("Evaluation report created.")
+        else:
+            st.error("Evaluation failed.")
+        st.code(out)
+
+
+# -----------------------------------------------------------------------------
+# Model Test
+# -----------------------------------------------------------------------------
+st.header("4) Model Test")
+with st.container(border=True):
+    model_path = st.text_input("model checkpoint", value=os.path.join(ART_DIR, "best_model.pt"))
+    scenario_files = _list_files(SCENARIO_DIR, ".json")
+    default_scn = ""
+    scenario_choice = st.selectbox("Scenario JSON (optional)", ["<auto-generate>"] + scenario_files, index=0)
+    if scenario_choice != "<auto-generate>":
+        default_scn = os.path.join(SCENARIO_DIR, scenario_choice)
+
+    c1, c2, c3 = st.columns(3)
+    max_seconds = c1.number_input("max_seconds", min_value=10, max_value=24 * 3600, value=600, step=10)
+    test_L = c2.number_input("L", min_value=5, max_value=2000, value=60, step=5)
+    test_stride = c3.number_input("stride", min_value=1, max_value=200, value=5, step=1)
+    test_out_dir = st.text_input(
+        "test output dir",
+        value=os.path.join(ART_DIR, f"sim_eval_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+    )
+
+    if st.button("🧪 Run Model Test on Simulation", use_container_width=True):
+        cmd = [
+            sys.executable,
+            os.path.join("scripts", "test_model_on_simulation.py"),
+            "--model", model_path,
+            "--max-seconds", str(int(max_seconds)),
+            "--L", str(int(test_L)),
+            "--stride", str(int(test_stride)),
+            "--out-dir", test_out_dir,
+        ]
+        if default_scn:
+            cmd.extend(["--scenario", default_scn])
+
+        code, out = _run_cmd(cmd)
+        if code == 0:
+            st.success("Model test finished.")
+        else:
+            st.error("Model test failed.")
+
+        with st.expander("Command", expanded=False):
+            st.code(" ".join(shlex.quote(x) for x in cmd))
+        st.code(out)
