@@ -11,7 +11,7 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from streaming.run_record import load_scenario, record_to_csv
+from core.streaming.run_record import load_scenario, record_to_csv
 
 
 def resolve_path(p: str) -> Path:
