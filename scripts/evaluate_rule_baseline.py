@@ -9,7 +9,7 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from evaluation.metrics import (
+from core.evaluation.metrics import (
     mae,
     rmse,
     precision_recall_f1,

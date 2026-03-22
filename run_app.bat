@@ -23,7 +23,7 @@ REM --- Activate env ---
 call conda activate tunnelai
 
 REM --- Run app ---
-streamlit run ui/dashboard.py
+streamlit run apps/ui/dashboard.py
 
 endlocal
 pause
