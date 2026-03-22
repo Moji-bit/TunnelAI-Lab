@@ -136,7 +136,7 @@ python streaming/run_batch_record.py
 ## 📊 Launch Dashboard
 
 ```bash
-streamlit run ui/dashboard.py
+streamlit run apps/ui/dashboard.py
 ```
 
 ---

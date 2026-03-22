@@ -7,7 +7,7 @@
 ```bash
 conda env create -f environment.yml
 conda activate tunnelai
-streamlit run ui/dashboard.py
+streamlit run apps/ui/dashboard.py
 ```
 
 ## Reproducible Setup (recommended for thesis)
@@ -65,22 +65,7 @@ run_reports_after_batch.bat
 git pull
 ```
 
-## TunnelAI-Viz Backend (FastAPI + WebSocket MVP)
-```bash
-pip install -r backend/requirements.txt
-uvicorn backend.app.main:app --reload --port 8000
-```
+## Scope (vereinfacht)
+- Kein separates Backend/Frontend mehr.
+- Fokus nur auf Streamlit-App (`apps/ui/dashboard.py`), KI-Modelle, Parameter, Tags und Auswertungs-Skripte.
 
-### Endpoints
-- `GET /api/health`
-- `GET /api/scenarios`
-- `GET /api/scenarios/{id}/meta`
-- `WS /ws/playback?scenario_id=stau_case_00`
-- `WS /ws/live`
-
-### Playback control messages
-Send JSON messages to `/ws/playback`:
-- `{"cmd":"play"}`
-- `{"cmd":"pause"}`
-- `{"cmd":"seek","t":120}`
-- `{"cmd":"speed","factor":10}`
