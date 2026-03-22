@@ -7,7 +7,7 @@
 ```bash
 conda env create -f environment.yml
 conda activate tunnelai
-streamlit run ui/dashboard.py
+streamlit run apps/ui/dashboard.py
 ```
 
 ## Reproducible Setup (recommended for thesis)
@@ -25,6 +25,8 @@ bash scripts/verify_clean_machine.sh
 - Label quality report: `python scripts/report_label_quality.py --csv data/raw/all_runs.csv --h 60`
 - Model baselines: `MODEL_BASELINES.md`
 - Run rule baseline: `python scripts/run_baselines.py --model rule --csv data/raw/all_runs.csv`
+- Build NPZ datasets: `python core/dataset/dataset_builder.py`
+- Train MultiTask model: `python scripts/train_multitask.py --train data/processed/train.npz --val data/processed/val.npz --test data/processed/test.npz`
 - Evaluation protocol: `EVALUATION_METRICS.md`
 - Run evaluation: `python scripts/evaluate_rule_baseline.py --csv data/raw/all_runs.csv --h 60 --threshold 0.5`
 - Robustness tests: `ROBUSTNESS_TESTS.md`
@@ -65,22 +67,7 @@ run_reports_after_batch.bat
 git pull
 ```
 
-## TunnelAI-Viz Backend (FastAPI + WebSocket MVP)
-```bash
-pip install -r backend/requirements.txt
-uvicorn backend.app.main:app --reload --port 8000
-```
+## Scope (vereinfacht)
+- Kein separates Backend/Frontend mehr.
+- Fokus nur auf Streamlit-App (`apps/ui/dashboard.py`), KI-Modelle, Parameter, Tags und Auswertungs-Skripte.
 
-### Endpoints
-- `GET /api/health`
-- `GET /api/scenarios`
-- `GET /api/scenarios/{id}/meta`
-- `WS /ws/playback?scenario_id=stau_case_00`
-- `WS /ws/live`
-
-### Playback control messages
-Send JSON messages to `/ws/playback`:
-- `{"cmd":"play"}`
-- `{"cmd":"pause"}`
-- `{"cmd":"seek","t":120}`
-- `{"cmd":"speed","factor":10}`
