@@ -10,7 +10,6 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 
 from core.dataset.torch_data import build_loaders
-from core.evaluation.metrics import classification_report_dict
 
 
 class LSTMClassifier(nn.Module):
@@ -234,23 +233,6 @@ def main() -> None:
 
     print("\n=== Confusion Matrix (rows=true, cols=pred) ===")
     print(test_cm)
-
-    y_true_all = []
-    y_pred_all = []
-    model.eval()
-    with torch.no_grad():
-        for x, y in test_loader:
-            x = x.to(device=device, dtype=torch.float32)
-            y = y.to(device=device, dtype=torch.long)
-            logits = model(x)
-            pred = torch.argmax(logits, dim=1)
-            y_true_all.extend(y.cpu().numpy().tolist())
-            y_pred_all.extend(pred.cpu().numpy().tolist())
-
-    target_names = [str(x) for x in event_class_names] if event_class_names is not None else None
-    report = classification_report_dict(y_true_all, y_pred_all, target_names=target_names)
-    print("\n=== Classification Report ===")
-    print(report)
 
 
 if __name__ == "__main__":

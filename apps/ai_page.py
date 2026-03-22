@@ -10,7 +10,6 @@ Streamlit page for end-to-end AI workflow in TunnelAI-Lab:
 from __future__ import annotations
 
 import os
-import re
 import shlex
 import subprocess
 import sys
@@ -18,7 +17,6 @@ from datetime import datetime
 from typing import List, Tuple
 
 import streamlit as st
-import pandas as pd
 
 # Ensure repo root import path when launched from nested cwd
 REPO_ROOT = os.path.dirname(os.path.dirname(__file__))
@@ -51,53 +49,6 @@ def _list_files(folder: str, suffix: str) -> List[str]:
     return files
 
 
-def _list_dirs(folder: str) -> List[str]:
-    if not os.path.isdir(folder):
-        return []
-    dirs = [d for d in os.listdir(folder) if os.path.isdir(os.path.join(folder, d))]
-    dirs.sort()
-    return dirs
-
-
-def _parse_train_log(log_text: str) -> pd.DataFrame:
-    rows = []
-    pat = re.compile(
-        r"^\[epoch\s+(\d+)\]\s+train_loss=([0-9eE\.\-]+)\s+val_loss=([0-9eE\.\-]+)\s+"
-        r"acc=([0-9eE\.\-]+)\s+prec_macro=([0-9eE\.\-]+)\s+rec_macro=([0-9eE\.\-]+)\s+f1_macro=([0-9eE\.\-]+)"
-    )
-    for line in log_text.splitlines():
-        m = pat.match(line.strip())
-        if not m:
-            continue
-        rows.append(
-            {
-                "epoch": int(m.group(1)),
-                "train_loss": float(m.group(2)),
-                "val_loss": float(m.group(3)),
-                "accuracy": float(m.group(4)),
-                "precision_macro": float(m.group(5)),
-                "recall_macro": float(m.group(6)),
-                "f1_macro": float(m.group(7)),
-            }
-        )
-    return pd.DataFrame(rows)
-
-
-def _extract_block(text: str, header: str) -> str:
-    lines = text.splitlines()
-    out = []
-    capture = False
-    for line in lines:
-        if line.strip() == header.strip():
-            capture = True
-            continue
-        if capture and line.startswith("==="):
-            break
-        if capture:
-            out.append(line)
-    return "\n".join(out).strip()
-
-
 st.set_page_config(page_title="TunnelAI-Lab – AI Page", layout="wide")
 st.title("🤖 TunnelAI-Lab – AI Workflow")
 st.caption("Dataset Builder • Training • Evaluation • Model Test")
@@ -114,20 +65,17 @@ with st.sidebar:
 # -----------------------------------------------------------------------------
 st.header("1) Dataset Builder")
 with st.container(border=True):
-    c0, c1, c2, c3, c4 = st.columns(5)
-    raw_subdirs = _list_dirs(RAW_DIR)
-    raw_dir_options = [RAW_DIR] + [os.path.join(RAW_DIR, d) for d in raw_subdirs]
-    selected_raw_dir = c0.selectbox("raw dir", raw_dir_options, index=0)
+    c1, c2, c3, c4 = st.columns(4)
     input_format = c1.selectbox("input_format", ["wide_csv", "scenario_csv", "long_tag_csv"], index=0)
-    L = c2.number_input("window size (L)", min_value=5, max_value=5000, value=60, step=5)
+    L = c2.number_input("L (window size)", min_value=5, max_value=5000, value=60, step=5)
     H = c3.number_input("H (forecast horizon)", min_value=1, max_value=1000, value=1, step=1)
     stride = c4.number_input("stride", min_value=1, max_value=200, value=5, step=1)
 
-    csv_or_dir_default = selected_raw_dir if input_format in {"wide_csv", "scenario_csv"} else os.path.join(selected_raw_dir, "stau_run_long.csv")
+    csv_or_dir_default = RAW_DIR if input_format in {"wide_csv", "scenario_csv"} else os.path.join(RAW_DIR, "stau_run_long.csv")
     csv_or_dir = st.text_input("CSV path or directory", value=csv_or_dir_default)
     out_dir = st.text_input("Output directory", value=PROC_DIR)
 
-    if st.button("🧱 Build Dataset", use_container_width=True):
+    if st.button("🧱 Build NPZ", use_container_width=True):
         py = (
             "from core.dataset.dataset_builder import DatasetConfig, build_npz_from_csv;"
             f"cfg=DatasetConfig(input_format='{input_format}',L={int(L)},H={int(H)},stride={int(stride)});"
@@ -139,34 +87,6 @@ with st.container(border=True):
         else:
             st.error("NPZ build failed.")
         st.code(out)
-
-        if code == 0:
-            train_npz = os.path.join(out_dir, "train.npz")
-            val_npz = os.path.join(out_dir, "val.npz")
-            test_npz = os.path.join(out_dir, "test.npz")
-            if all(os.path.isfile(p) for p in [train_npz, val_npz, test_npz]):
-                import numpy as np
-
-                dtr = np.load(train_npz, allow_pickle=False)
-                dva = np.load(val_npz, allow_pickle=False)
-                dte = np.load(test_npz, allow_pickle=False)
-
-                y_all = np.concatenate(
-                    [
-                        dtr["Y_event_cls"].astype(np.int64),
-                        dva["Y_event_cls"].astype(np.int64),
-                        dte["Y_event_cls"].astype(np.int64),
-                    ]
-                )
-                vals, cnts = np.unique(y_all, return_counts=True)
-                class_names = dtr["event_class_names"].tolist() if "event_class_names" in dtr.files else []
-                dist = {}
-                for v, c in zip(vals, cnts):
-                    key = class_names[int(v)] if int(v) < len(class_names) else str(int(v))
-                    dist[key] = int(c)
-
-                st.markdown("**Dataset Summary**")
-                st.write({"num_windows": int(len(y_all)), "class_distribution": dist})
 
 
 # -----------------------------------------------------------------------------
@@ -204,35 +124,6 @@ with st.container(border=True):
         else:
             st.error("Training failed.")
         st.code(out)
-
-        hist = _parse_train_log(out)
-        if not hist.empty:
-            st.markdown("**Training Curves**")
-            st.line_chart(hist.set_index("epoch")[["train_loss", "val_loss"]])
-
-            st.markdown("**Validation Metrics**")
-            st.line_chart(hist.set_index("epoch")[["accuracy", "f1_macro"]])
-
-            last = hist.iloc[-1]
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Final Val Loss", f"{last['val_loss']:.4f}")
-            m2.metric("Final Accuracy", f"{last['accuracy']:.4f}")
-            m3.metric("Final F1 Macro", f"{last['f1_macro']:.4f}")
-
-        # Show test outputs from training script
-        cm_text = _extract_block(out, "=== Confusion Matrix (rows=true, cols=pred) ===")
-        rep_text = _extract_block(out, "=== Classification Report ===")
-        test_metrics = _extract_block(out, "=== Test Metrics ===")
-
-        if test_metrics:
-            st.markdown("**Test Accuracy / Metrics**")
-            st.code(test_metrics)
-        if cm_text:
-            st.markdown("**Confusion Matrix**")
-            st.code(cm_text)
-        if rep_text:
-            st.markdown("**Classification Report**")
-            st.code(rep_text)
 
 
 # -----------------------------------------------------------------------------
