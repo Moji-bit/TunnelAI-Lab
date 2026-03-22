@@ -15,10 +15,7 @@ if __package__ is None or __package__ == "":
 
     sys.path.insert(0, BASE_DIR)
 
-from core.sim.scenario_generator import generate_random_scenarios
-from core.streaming.run_record import load_scenario, record_to_csv, record_to_exact_csv
-
-EVENT_CLASSES = ["collision", "stalled_vehicle", "wrong_way_driver", "vehicle_fire", "none"]
+from core.streaming.run_record import record_to_csv, load_scenario
 
 
 def _resolve_path(path: str) -> str:

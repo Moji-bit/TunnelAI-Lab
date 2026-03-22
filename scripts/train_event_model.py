@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import random
 from dataclasses import dataclass
 
 import numpy as np
@@ -11,7 +10,6 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 
 from core.dataset.torch_data import build_loaders
-from core.evaluation.metrics import classification_report_dict
 
 
 class LSTMClassifier(nn.Module):
@@ -129,14 +127,6 @@ def main() -> None:
     ap.add_argument("--batch_size", type=int, default=64)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--backbone", choices=["lstm", "transformer"], default="lstm")
-    ap.add_argument("--optimizer", choices=["adam", "adamw", "sgd"], default="adam")
-    ap.add_argument("--momentum", type=float, default=0.9)
-    ap.add_argument("--weight_decay", type=float, default=0.0)
-    ap.add_argument("--early_stopping", action="store_true")
-    ap.add_argument("--patience", type=int, default=5)
-    ap.add_argument("--use_cuda", action="store_true")
-    ap.add_argument("--device", default="auto", help="auto | cpu | cuda")
-    ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--d_model", type=int, default=128)
     ap.add_argument("--n_layers", type=int, default=2)
     ap.add_argument("--n_heads", type=int, default=4)
@@ -144,18 +134,7 @@ def main() -> None:
     ap.add_argument("--save_dir", default="artifacts")
     args = ap.parse_args()
 
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(args.seed)
-
-    if args.device == "cpu":
-        device = torch.device("cpu")
-    elif args.device == "cuda":
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    else:
-        device = torch.device("cuda" if (args.use_cuda and torch.cuda.is_available()) else "cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     train_loader, val_loader, test_loader, _scaler, meta = build_loaders(
         train_path=args.train,
@@ -185,43 +164,18 @@ def main() -> None:
     model.to(device)
 
     loss_fn = nn.CrossEntropyLoss()
-    if args.optimizer == "sgd":
-        optimizer = torch.optim.SGD(
-            model.parameters(),
-            lr=args.lr,
-            momentum=float(args.momentum),
-            weight_decay=float(args.weight_decay),
-        )
-    elif args.optimizer == "adamw":
-        optimizer = torch.optim.AdamW(
-            model.parameters(),
-            lr=args.lr,
-            weight_decay=float(args.weight_decay),
-        )
-    else:
-        optimizer = torch.optim.Adam(
-            model.parameters(),
-            lr=args.lr,
-            weight_decay=float(args.weight_decay),
-        )
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     best_f1 = -1.0
     os.makedirs(args.save_dir, exist_ok=True)
     best_path = os.path.join(args.save_dir, "best_model.pt")
 
     print(f"device={device}, backbone={args.backbone}, d_in={d_in}, classes={n_classes}")
-    print(
-        "training_settings="
-        f"epochs={args.epochs}, batch_size={args.batch_size}, lr={args.lr}, "
-        f"optimizer={args.optimizer}, momentum={args.momentum}, weight_decay={args.weight_decay}, "
-        f"early_stopping={args.early_stopping}, patience={args.patience}, seed={args.seed}"
-    )
     if feature_names is not None:
         print(f"features={list(feature_names)}")
     if event_class_names is not None:
         print(f"event_class_names={list(event_class_names)}")
 
-    epochs_no_improve = 0
     for epoch in range(1, args.epochs + 1):
         model.train()
         total_loss = 0.0
@@ -253,7 +207,6 @@ def main() -> None:
 
         if val_m.f1_macro > best_f1:
             best_f1 = val_m.f1_macro
-            epochs_no_improve = 0
             torch.save(
                 {
                     "model_state_dict": model.state_dict(),
@@ -266,11 +219,6 @@ def main() -> None:
                 best_path,
             )
             print(f"  ↳ saved best model: {best_path} (f1_macro={best_f1:.4f})")
-        else:
-            epochs_no_improve += 1
-            if args.early_stopping and epochs_no_improve >= max(1, int(args.patience)):
-                print(f"  ↳ early stopping at epoch {epoch} (patience={args.patience})")
-                break
 
     ckpt = torch.load(best_path, map_location=device)
     model.load_state_dict(ckpt["model_state_dict"])
@@ -285,23 +233,6 @@ def main() -> None:
 
     print("\n=== Confusion Matrix (rows=true, cols=pred) ===")
     print(test_cm)
-
-    y_true_all = []
-    y_pred_all = []
-    model.eval()
-    with torch.no_grad():
-        for x, y in test_loader:
-            x = x.to(device=device, dtype=torch.float32)
-            y = y.to(device=device, dtype=torch.long)
-            logits = model(x)
-            pred = torch.argmax(logits, dim=1)
-            y_true_all.extend(y.cpu().numpy().tolist())
-            y_pred_all.extend(pred.cpu().numpy().tolist())
-
-    target_names = [str(x) for x in event_class_names] if event_class_names is not None else None
-    report = classification_report_dict(y_true_all, y_pred_all, target_names=target_names)
-    print("\n=== Classification Report ===")
-    print(report)
 
 
 if __name__ == "__main__":
