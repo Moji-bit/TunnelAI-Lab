@@ -215,11 +215,21 @@ def record_to_exact_csv(
 
 def main():
     """CLI wrapper so this module can be run directly from terminal."""
-    p = argparse.ArgumentParser(
-        description="TunnelAI-Lab: record mock OPC-UA stream to long-format CSV"
-    )
+    p = argparse.ArgumentParser(description="TunnelAI-Lab: record mock stream to ML-ready wide CSV")
     p.add_argument("--scenario", type=str, default=None, help="Path to scenario JSON (optional)")
-    p.add_argument("--out", type=str, default="data/raw/stau_run_long.csv", help="Output CSV path")
+    p.add_argument("--out", type=str, default="data/raw/stau_run_ml.csv", help="ML-ready wide CSV output path")
+    p.add_argument(
+        "--exact-out",
+        type=str,
+        default=None,
+        help="Deprecated alias for --out (kept for backward compatibility)",
+    )
+    p.add_argument(
+        "--long-out",
+        type=str,
+        default=None,
+        help="Optional long-format tag CSV output path (legacy compatibility)",
+    )
     p.add_argument(
         "--exact-out",
         type=str,
@@ -240,11 +250,12 @@ def main():
     )
 
     args = p.parse_args()
+    target_out = args.exact_out if args.exact_out else args.out
 
     scenario = load_scenario(args.scenario)
-    out_csv = record_to_csv(
+    out_csv = record_to_exact_csv(
         scenario=scenario,
-        out_csv=args.out,
+        out_csv=target_out,
         start_time_iso=args.start,
         max_seconds=args.max_seconds,
     )
