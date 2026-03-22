@@ -98,6 +98,37 @@ class Scenario:
     vms_speed_limit_kmh: float = 80.0
     fan_stage: int = 2
 
+    # -----------------------------
+    # Tunnel metadata for exact CSV exports
+    # -----------------------------
+    tunnel_length_m: float = 1200.0
+    tunnel_width_m: float = 10.5
+    clearance_height_m: float = 4.8
+    gradient_pct: float = 1.5
+    curvature_radius_m: float = 850.0
+    profile: str = "bidirectional_road_tunnel"
+    tubes: int = 2
+    lanes_per_tube: int = 2
+    direction_mode: str = "unidirectional_per_tube"
+    aadt: float = 42000.0
+    heavy_vehicle_pct: float = 12.0
+    speed_limit_kmh: float = 100.0
+    traffic_volume_pct: float = 100.0
+    escape_route_spacing_m: float = 300.0
+    emergency_call_spacing_m: float = 150.0
+    layby_spacing_m: float = 600.0
+    vent_system: str = "longitudinal"
+    jet_fan_count: int = 16
+    air_velocity_ms: float = 2.5
+    volume_flow_m3s: float = 380.0
+    altitude_m: float = 450.0
+    entry_luminance_cd: float = 280.0
+    interior_luminance_cd: float = 9.0
+    emergency_lighting: int = 1
+    temperature_c: float = 18.0
+    weather_intensity_pct: float = 0.0
+    wind_speed_ms: float = 0.0
+
 
 def inflow(sc: Scenario, t_s: int) -> float:
     """Return input traffic demand at time `t_s` (veh/h).
