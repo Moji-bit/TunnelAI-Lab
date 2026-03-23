@@ -84,7 +84,7 @@ Outputs:
   - `.\scripts\run_reports_after_batch.bat`
   - `run_reports_after_batch.bat`
   - `python scripts\run_reports_after_batch.py`
-- If you still see old errors (e.g. `fan_stage_dyn`), update local repo first:
+- If you still see old errors, update local repo first:
 ```bat
 git pull
 ```
