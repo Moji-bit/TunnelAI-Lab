@@ -12,20 +12,54 @@ In plain words:
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import os
 import sys
 from datetime import datetime
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 # Make repository root importable when this file is executed directly.
-BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+CORE_DIR = os.path.dirname(os.path.dirname(__file__))
+BASE_DIR = os.path.dirname(CORE_DIR)
 if __package__ is None or __package__ == "":
     sys.path.insert(0, BASE_DIR)
 
 from core.streaming.opcua_mock_server import generate_stream
-from streaming.recorder import write_long_csv
-from sim.event_generator import Scenario
+from core.streaming.recorder import write_long_csv
+from core.sim.event_generator import EVENT_TYPE_TO_CODE, Scenario
+
+EXACT_COLUMNS = [
+    "scenario_id",
+    "timestamp",
+    "speed_kmh",
+    "flow_veh_h",
+    "occupancy_pct",
+    "co_ppm",
+    "no2_ppm",
+    "pm25",
+    "temp_c",
+    "humidity_pct",
+    "visibility_m",
+    "air_velocity",
+    "air_pressure",
+    "fan_stage",
+    "tunnel_length_m",
+    "gradient_pct",
+    "curvature_radius_m",
+    "tubes",
+    "lanes_per_tube",
+    "direction_mode",
+    "aadt",
+    "heavy_vehicle_pct",
+    "speed_limit_kmh",
+    "vent_system",
+    "jet_fan_count",
+    "weather_type",
+    "event_type",
+    "event_type_code",
+    "risk_level",
+]
 
 
 def _resolve_path(path: str | None) -> str | None:
@@ -102,13 +136,114 @@ def record_to_csv(
     return resolved_out_csv
 
 
+def _risk_level(speed_kmh: float, occ_pct: float, co_ppm: float, visibility_m: float, event_type: str) -> str:
+    congestion = max(0.0, min(1.0, (80.0 - speed_kmh) / 80.0)) + max(0.0, min(1.0, occ_pct / 100.0))
+    air_risk = max(0.0, min(1.0, co_ppm / 150.0)) + max(0.0, min(1.0, (300.0 - visibility_m) / 300.0))
+    event_bonus = 0.8 if event_type != "none" else 0.0
+    score = (0.6 * congestion + 0.7 * air_risk + event_bonus) / 2.1
+    if score >= 0.75:
+        return "critical"
+    if score >= 0.5:
+        return "high"
+    if score >= 0.25:
+        return "medium"
+    return "low"
+
+
+def record_to_exact_csv(
+    scenario: Scenario,
+    out_csv: str,
+    start_time_iso: str,
+    max_seconds: int | None = None,
+) -> str:
+    """Write ML-first wide CSV (one row per second, no tag pivot)."""
+    t0 = datetime.fromisoformat(start_time_iso)
+    rows: List[Dict[str, object]] = []
+
+    for n, snap in enumerate(generate_stream(scenario, t0)):
+        tags = snap.tags
+        incident_active = bool(tags.get("Z3.EVT.Incident.Active", 0.0) >= 0.5)
+        weather_active = bool(tags.get("Z3.EVT.Weather.Active", 0.0) >= 0.5)
+
+        event_type = scenario.incident_type if incident_active else "none"
+        event_type_code = int(EVENT_TYPE_TO_CODE.get(event_type, EVENT_TYPE_TO_CODE["none"]))
+        speed_kmh = float(tags.get("Z2.TRAF.AGG.S01.Speed_10s", tags.get("Z1.TRAF.DET.S01.Speed", 0.0)))
+        flow_veh_h = float(tags.get("Z2.TRAF.AGG.S01.FlowIn_10s", tags.get("Z1.TRAF.DET.S01.FlowIn", 0.0))) * 60.0
+        occupancy_pct = float(tags.get("Z1.TRAF.DET.S01.Occ", 0.0))
+        co_ppm = float(tags.get("Z2.ENV.AGG.S01.CO_10s", tags.get("Z1.ENV.CO.S01.Value", 0.0)))
+        temp_c = float(tags.get("Z1.ENV.TEMP.S01.Value", scenario.temperature_c))
+        visibility_pct = float(tags.get("Z2.ENV.AGG.S01.VIS_10s", tags.get("Z1.ENV.VIS.S01.Value", 100.0)))
+        visibility_m = max(20.0, visibility_pct / 100.0 * 400.0)
+        no2_ppm = max(0.0, co_ppm * 0.32)
+        pm25 = max(0.0, co_ppm * 0.18)
+        humidity_pct = 45.0 + (scenario.weather_intensity_pct * 0.45 if weather_active else 0.0)
+        fan_stage = float(tags.get("Z1.VENT.FAN.F01.Stage", scenario.fan_stage))
+        air_velocity = max(0.1, float(scenario.air_velocity_ms) + 0.35 * fan_stage)
+        air_pressure = 101325.0 * (1.0 - 2.25577e-5 * max(0.0, float(scenario.altitude_m))) ** 5.25588
+
+        rows.append(
+            {
+                "scenario_id": str(scenario.scenario_id),
+                "timestamp": snap.timestamp.isoformat(),
+                "speed_kmh": float(speed_kmh),
+                "flow_veh_h": float(flow_veh_h),
+                "occupancy_pct": float(occupancy_pct),
+                "co_ppm": float(co_ppm),
+                "no2_ppm": float(no2_ppm),
+                "pm25": float(pm25),
+                "temp_c": float(temp_c),
+                "humidity_pct": float(max(0.0, min(100.0, humidity_pct))),
+                "visibility_m": float(visibility_m),
+                "air_velocity": float(air_velocity),
+                "air_pressure": float(air_pressure),
+                "fan_stage": int(round(fan_stage)),
+                "tunnel_length_m": float(scenario.tunnel_length_m),
+                "gradient_pct": float(scenario.gradient_pct),
+                "curvature_radius_m": float(scenario.curvature_radius_m),
+                "tubes": int(scenario.tubes),
+                "lanes_per_tube": int(scenario.lanes_per_tube),
+                "direction_mode": str(scenario.direction_mode),
+                "aadt": float(scenario.aadt),
+                "heavy_vehicle_pct": float(scenario.heavy_vehicle_pct),
+                "speed_limit_kmh": float(scenario.speed_limit_kmh),
+                "vent_system": str(scenario.vent_system),
+                "jet_fan_count": int(scenario.jet_fan_count),
+                "weather_type": str(scenario.weather_type if weather_active else "clear"),
+                "event_type": str(event_type),
+                "event_type_code": event_type_code,
+                "risk_level": _risk_level(speed_kmh, occupancy_pct, co_ppm, visibility_m, event_type),
+            }
+        )
+
+        if max_seconds is not None and (n + 1) >= max_seconds:
+            break
+
+    resolved_out_csv = _resolve_path(out_csv) or out_csv
+    os.makedirs(os.path.dirname(resolved_out_csv) or ".", exist_ok=True)
+    with open(resolved_out_csv, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=EXACT_COLUMNS)
+        writer.writeheader()
+        writer.writerows(rows)
+    return resolved_out_csv
+
+
 def main():
     """CLI wrapper so this module can be run directly from terminal."""
-    p = argparse.ArgumentParser(
-        description="TunnelAI-Lab: record mock OPC-UA stream to long-format CSV"
-    )
+    p = argparse.ArgumentParser(description="TunnelAI-Lab: record mock stream to ML-ready wide CSV")
     p.add_argument("--scenario", type=str, default=None, help="Path to scenario JSON (optional)")
-    p.add_argument("--out", type=str, default="data/raw/stau_run_long.csv", help="Output CSV path")
+    p.add_argument("--out", type=str, default="data/raw/stau_run_ml.csv", help="ML-ready wide CSV output path")
+    p.add_argument(
+        "--exact-out",
+        type=str,
+        default=None,
+        help="Deprecated alias for --out (kept for backward compatibility)",
+    )
+    p.add_argument(
+        "--long-out",
+        type=str,
+        default=None,
+        help="Optional long-format tag CSV output path (legacy compatibility)",
+    )
     p.add_argument(
         "--start",
         type=str,
@@ -123,16 +258,27 @@ def main():
     )
 
     args = p.parse_args()
+    target_out = args.exact_out if args.exact_out else args.out
 
     scenario = load_scenario(args.scenario)
-    out_csv = record_to_csv(
+    out_csv = record_to_exact_csv(
         scenario=scenario,
-        out_csv=args.out,
+        out_csv=target_out,
         start_time_iso=args.start,
         max_seconds=args.max_seconds,
     )
+    long_out_csv = None
+    if args.long_out:
+        long_out_csv = record_to_csv(
+            scenario=scenario,
+            out_csv=args.long_out,
+            start_time_iso=args.start,
+            max_seconds=args.max_seconds,
+        )
 
-    print("✅ Recorded stream to:", out_csv)
+    print("✅ Recorded ML-ready wide CSV to:", out_csv)
+    if long_out_csv:
+        print("✅ Recorded legacy long CSV to:", long_out_csv)
     print("Scenario:", scenario.scenario_id, "| duration_s =", scenario.duration_s)
 
 
