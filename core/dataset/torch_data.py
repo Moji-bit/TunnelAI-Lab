@@ -34,32 +34,34 @@ class TunnelWindowDataset(Dataset):
     """
     returns:
       x: (L,d) float32
-      y_forecast: (H,m) float32
-      y_event: scalar float32 (0/1)
+      y_event_cls: scalar int64 class id
     """
     def __init__(self, npz_dict: dict, scaler: StandardScaler | None = None):
         X = npz_dict["X"].astype(np.float32)
-        Yf = npz_dict["Y_forecast"].astype(np.float32)
-        Ye = npz_dict["Y_event"].astype(np.float32)
+        if "Y_event_cls" in npz_dict:
+            Ye_cls = npz_dict["Y_event_cls"].astype(np.int64)
+        elif "Y_event" in npz_dict:
+            # Backward-compatible fallback from binary event labels.
+            Ye_cls = npz_dict["Y_event"].astype(np.int64)
+        else:
+            raise KeyError("NPZ must contain 'Y_event_cls' (or legacy 'Y_event').")
 
         if scaler is not None:
             X = scaler.transform(X).astype(np.float32)
 
         self.X = X
-        self.Yf = Yf
-        self.Ye = Ye
+        self.Ye_cls = Ye_cls
 
-        self.feature_tags = npz_dict.get("feature_tags", None)
-        self.forecast_targets = npz_dict.get("forecast_targets", None)
+        self.feature_names = npz_dict.get("feature_names", npz_dict.get("feature_tags", None))
+        self.event_class_names = npz_dict.get("event_class_names", None)
 
     def __len__(self):
         return self.X.shape[0]
 
     def __getitem__(self, idx: int):
         x = torch.from_numpy(self.X[idx])
-        y_f = torch.from_numpy(self.Yf[idx])
-        y_e = torch.tensor(self.Ye[idx])
-        return x, y_f, y_e
+        y_event_cls = torch.tensor(self.Ye_cls[idx], dtype=torch.long)
+        return x, y_event_cls
 
 
 def build_loaders(
@@ -80,6 +82,12 @@ def build_loaders(
     val_ds = TunnelWindowDataset(val_npz, scaler=scaler)
     test_ds = TunnelWindowDataset(test_npz, scaler=scaler)
 
+    print(
+        f"[shape] train X={train_ds.X.shape}, Y_event_cls={train_ds.Ye_cls.shape}; "
+        f"val X={val_ds.X.shape}, Y_event_cls={val_ds.Ye_cls.shape}; "
+        f"test X={test_ds.X.shape}, Y_event_cls={test_ds.Ye_cls.shape}"
+    )
+
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True,
                               num_workers=num_workers, pin_memory=pin_memory)
     val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False,
@@ -88,7 +96,7 @@ def build_loaders(
                              num_workers=num_workers, pin_memory=pin_memory)
 
     meta = {
-        "feature_tags": train_ds.feature_tags,
-        "forecast_targets": train_ds.forecast_targets,
+        "feature_names": train_ds.feature_names,
+        "event_class_names": train_ds.event_class_names,
     }
     return train_loader, val_loader, test_loader, scaler, meta

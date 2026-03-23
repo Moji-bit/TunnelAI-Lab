@@ -4,7 +4,7 @@ import json
 import os
 import numpy as np
 from dataclasses import asdict
-from sim.event_generator import Scenario
+from core.sim.event_generator import Scenario
 
 
 def generate_random_scenarios(
