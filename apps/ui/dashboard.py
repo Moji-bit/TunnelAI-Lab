@@ -97,10 +97,7 @@ def load_ai_model(model_path: str):
     return model, ckpt
 
 
-# -------------------------
-# File utilities
-# -------------------------
-def list_json_files(folder: str) -> List[str]:
+def _list_files(folder: str, suffix: str) -> List[str]:
     if not os.path.isdir(folder):
         return []
     files = [f for f in os.listdir(folder) if f.lower().endswith(suffix.lower())]
