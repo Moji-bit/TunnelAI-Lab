@@ -30,7 +30,7 @@ call conda run -n %ENV_NAME% python scripts/run_experiment_matrix.py --mode plan
 if errorlevel 1 exit /b 1
 
 echo [5/5] Running recorder smoke test
-call conda run -n %ENV_NAME% python streaming/run_record.py --scenario scenarios/stau_case_00.json --out data/raw/_clean_check.csv --max-seconds 2
+call conda run -n %ENV_NAME% python streaming/run_record.py --out data/raw/_clean_check.csv --max-seconds 2
 if errorlevel 1 exit /b 1
 
 echo [OK] Clean-machine verification passed.
