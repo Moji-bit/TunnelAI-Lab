@@ -78,22 +78,6 @@ Outputs:
 - `data/augmented/augmented_tunnels.csv`
 - `data/augmented/augmentation_manifest.json`
 
-## Dataset Cleanup / Fehlervermeidung
-
-Wenn du nur mit deinen Rohdaten arbeiten willst, nutze diese Reihenfolge:
-
-1. Nur gewünschte CSVs in `data/raw/` lassen (alte Testdateien entfernen).
-2. Long-Format-Merge (falls benötigt):
-   ```bash
-   python core/dataset/merge_csv.py --raw-dir data/raw --out-path data/raw/all_runs.csv
-   ```
-3. NPZ-Build robust aus `data/raw`:
-   ```bash
-   python core/dataset/dataset_builder.py
-   ```
-
-Der Builder überspringt jetzt automatisch nicht-passende Dateien und fehlende optionale Feature-Spalten statt mit Fehler abzubrechen.
-
 ## Troubleshooting (Windows)
 - If you get `bash` not found: use `.bat` scripts from Anaconda Prompt.
 - If `scripts\run_reports_after_batch.bat` is not found, try either:
