@@ -6,8 +6,8 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 
-from core.models.bachbone.transformer import TransformerBackbone
-from core.models.bachbone.lstm import LSTMBackbone
+from core.models.backbone.transformer import TransformerBackbone
+from core.models.backbone.lstm import LSTMBackbone
 from core.models.heads.forecasting import ForecastHead
 from core.models.heads.event import EventHead
 from core.models.heads.risk import RiskHead

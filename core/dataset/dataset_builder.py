@@ -28,37 +28,35 @@ DEFAULT_FORECAST_TARGETS = [
 ]
 
 DEFAULT_SCENARIO_DYNAMIC_FEATURES = [
-    "speed_kmh",
+    "speed_mean_kmh",
     "flow_veh_h",
     "occupancy_pct",
     "co_ppm",
     "no2_ppm",
-    "pm25",
+    "pm25_ug_m3",
     "temp_c",
     "humidity_pct",
     "visibility_m",
-    "air_velocity",
-    "air_pressure",
-    "fire_alarm_state",
+    "air_velocity_mps",
+    "pressure_hpa",
+    "vehicle_count",
+    "queue_length_m",
+    "stopped_vehicle_count",
+    "heavy_vehicle_count",
     "jet_fan_active_count",
+    "jet_fan_power_pct",
+    "fire_alarm_state",
     "barrier_entry_state",
+    "barrier_exit_state",
+    "camera_alarm_count",
+    "sos_calls_active",
+    "emergency_mode_active",
+    "sensor_fault_active",
+    "fan_fault_active",
+    "camera_fault_active",
 ]
 
-DEFAULT_SCENARIO_STATIC_FEATURES = [
-    "tunnel_length_m",
-    "gradient_pct",
-    "curvature_radius_m",
-    "profile",
-    "tubes",
-    "lanes_per_tube",
-    "direction_mode",
-    "aadt",
-    "heavy_vehicle_pct",
-    "speed_limit_kmh",
-    "vent_system",
-    "jet_fan_count",
-    "weather",
-]
+DEFAULT_SCENARIO_STATIC_FEATURES: list[str] = []
 
 
 @dataclass
@@ -83,8 +81,8 @@ class DatasetConfig:
     scenario_id_col: str = "scenario_id"
     timestamp_col: str = "timestamp"
     timestamp_s_col: str = "timestamp_s"
-    event_type_col: str = "event_type"
-    risk_level_col: str = "risk_level"
+    event_type_col: str = "label_event_type"
+    risk_level_col: str = "label_risk_level"
     scenario_dynamic_features: List[str] | None = None
     scenario_static_features: List[str] | None = None
 
@@ -128,11 +126,20 @@ def load_scenario_csv_dir(raw_dir: str, scenario_id_col: str = "scenario_id") ->
         raise FileNotFoundError(f"No CSV files found in directory: {raw_dir}")
 
     chunks: List[pd.DataFrame] = []
+    skipped: List[str] = []
     for fp in files:
         df = pd.read_csv(fp)
         if scenario_id_col not in df.columns:
             df[scenario_id_col] = fp.stem
+        has_time = ("timestamp" in df.columns) or ("timestamp_s" in df.columns)
+        if not has_time:
+            skipped.append(fp.name)
+            continue
         chunks.append(df)
+    if skipped:
+        print(f"[dataset_builder] skipped non-timeseries files: {', '.join(skipped)}")
+    if not chunks:
+        raise RuntimeError(f"No usable scenario CSV files with timestamp/timestamp_s in: {raw_dir}")
     return pd.concat(chunks, ignore_index=True)
 
 
@@ -282,13 +289,25 @@ def make_windows_long(wide: pd.DataFrame, cfg: DatasetConfig) -> Dict[str, objec
 
 def make_windows_scenario_csv(df: pd.DataFrame, cfg: DatasetConfig) -> Dict[str, object]:
     """Build windows directly from scenario-wise timeseries CSV rows."""
-    required = {cfg.scenario_id_col, cfg.event_type_col}
+    required = {cfg.scenario_id_col}
     time_col = cfg.timestamp_col if cfg.timestamp_col in df.columns else cfg.timestamp_s_col
     if time_col not in df.columns:
         raise ValueError(
             f"scenario_csv requires either '{cfg.timestamp_col}' or '{cfg.timestamp_s_col}' column"
         )
     required.add(time_col)
+
+    df_local = df.copy()
+    if cfg.event_type_col not in df_local.columns:
+        if "event_type" in df_local.columns:
+            df_local[cfg.event_type_col] = df_local["event_type"]
+        elif "label_event_type" in df_local.columns:
+            df_local[cfg.event_type_col] = df_local["label_event_type"]
+        elif "label_event_active" in df_local.columns:
+            active = pd.to_numeric(df_local["label_event_active"], errors="coerce").fillna(0).astype(int)
+            df_local[cfg.event_type_col] = np.where(active >= 1, "incident", "normal")
+        else:
+            df_local[cfg.event_type_col] = "normal"
 
     dynamic_features = cfg.scenario_dynamic_features or DEFAULT_SCENARIO_DYNAMIC_FEATURES
     static_features = cfg.scenario_static_features or DEFAULT_SCENARIO_STATIC_FEATURES
@@ -298,24 +317,27 @@ def make_windows_scenario_csv(df: pd.DataFrame, cfg: DatasetConfig) -> Dict[str,
     if missing_required:
         raise ValueError(f"scenario_csv missing required columns: {missing_required}")
 
-    missing_features = [c for c in feature_cols if c not in df.columns]
+    available_feature_cols = [c for c in feature_cols if c in df_local.columns]
+    missing_features = [c for c in feature_cols if c not in df_local.columns]
     if missing_features:
-        raise ValueError(f"scenario_csv missing feature columns: {missing_features}")
+        print(f"[dataset_builder] missing feature columns skipped: {missing_features}")
+    if not available_feature_cols:
+        raise ValueError("scenario_csv has no usable feature columns for scenario mode.")
 
     forecast_targets = cfg.forecast_targets or []
-    missing_targets = [c for c in forecast_targets if c not in df.columns]
+    missing_targets = [c for c in forecast_targets if c not in df_local.columns]
     if missing_targets:
-        raise ValueError(f"scenario_csv missing forecast target columns: {missing_targets}")
+        print(f"[dataset_builder] missing forecast targets skipped: {missing_targets}")
+        forecast_targets = [c for c in forecast_targets if c in df_local.columns]
 
-    event_mapping, event_class_names = _event_mapping(df[cfg.event_type_col].astype(str).tolist())
+    event_mapping, event_class_names = _event_mapping(df_local[cfg.event_type_col].astype(str).tolist())
     normal_id = int(event_mapping["normal"])
 
-    df_local = df.copy()
     df_local[cfg.event_type_col] = df_local[cfg.event_type_col].map(_normalize_event_type)
     df_local["_event_id"] = df_local[cfg.event_type_col].map(event_mapping).astype(int)
 
     # ensure numeric matrix for features (encode string columns like profile/weather/vent_system)
-    feat_frame, cat_meta = _encode_categorical_columns(df_local[feature_cols], feature_cols)
+    feat_frame, cat_meta = _encode_categorical_columns(df_local[available_feature_cols], available_feature_cols)
     feat_frame = feat_frame.apply(pd.to_numeric, errors="coerce")
 
     X_list: List[np.ndarray] = []
@@ -378,7 +400,7 @@ def make_windows_scenario_csv(df: pd.DataFrame, cfg: DatasetConfig) -> Dict[str,
     Y_forecast = np.stack(Yf_list).astype(np.float32) if Yf_list else None
 
     meta = {
-        "feature_names": np.array(feature_cols, dtype=str),
+        "feature_names": np.array(available_feature_cols, dtype=str),
         "forecast_targets": np.array(forecast_targets, dtype=str),
         "event_class_names": event_class_names,
         "timestamps": np.array(ts_list, dtype=np.int64),
@@ -528,9 +550,9 @@ def build_npz_from_csv(
 
 
 if __name__ == "__main__":
-    cfg = DatasetConfig(L=300, H=60, stride=5, input_format="long_tag_csv")
+    cfg = DatasetConfig(L=300, H=60, stride=5, input_format="scenario_csv")
     build_npz_from_csv(
-        csv_path="data/raw/stau_run_long.csv",
+        csv_path="data/raw",
         out_dir="data/processed",
         cfg=cfg,
     )

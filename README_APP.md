@@ -55,13 +55,52 @@ python scripts\run_reports_after_batch.py
 run_reports_after_batch.bat
 ```
 
+## External Sensor Data Augmentation (4-file format)
+
+Wenn du externe Rohdaten in vier CSV-Dateien hast (Labels, Sensors, Tunnel, Scenario-Meta),
+kannst du daraus direkt 10.000 augmentierte Szenarien erzeugen:
+
+```bash
+python scripts/augment_external_scenarios.py \
+  --labels-csv data/external/labels.csv \
+  --sensors-csv data/external/sensors.csv \
+  --tunnel-csv data/external/tunnel.csv \
+  --scenario-csv data/external/scenario.csv \
+  --out-dir data/augmented \
+  --n-scenarios 10000 \
+  --seed 42
+```
+
+Outputs:
+- `data/augmented/augmented_scenarios.csv`
+- `data/augmented/augmented_sensors.csv`
+- `data/augmented/augmented_labels.csv`
+- `data/augmented/augmented_tunnels.csv`
+- `data/augmented/augmentation_manifest.json`
+
+## Dataset Cleanup / Fehlervermeidung
+
+Wenn du nur mit deinen Rohdaten arbeiten willst, nutze diese Reihenfolge:
+
+1. Nur gewünschte CSVs in `data/raw/` lassen (alte Testdateien entfernen).
+2. Long-Format-Merge (falls benötigt):
+   ```bash
+   python core/dataset/merge_csv.py --raw-dir data/raw --out-path data/raw/all_runs.csv
+   ```
+3. NPZ-Build robust aus `data/raw`:
+   ```bash
+   python core/dataset/dataset_builder.py
+   ```
+
+Der Builder überspringt jetzt automatisch nicht-passende Dateien und fehlende optionale Feature-Spalten statt mit Fehler abzubrechen.
+
 ## Troubleshooting (Windows)
 - If you get `bash` not found: use `.bat` scripts from Anaconda Prompt.
 - If `scripts\run_reports_after_batch.bat` is not found, try either:
   - `.\scripts\run_reports_after_batch.bat`
   - `run_reports_after_batch.bat`
   - `python scripts\run_reports_after_batch.py`
-- If you still see old errors (e.g. `fan_stage_dyn`), update local repo first:
+- If you still see old errors, update local repo first:
 ```bat
 git pull
 ```
