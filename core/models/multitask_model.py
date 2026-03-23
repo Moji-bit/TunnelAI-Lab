@@ -6,38 +6,11 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 
-from core.models.backbone.lstm import LSTMBackbone
-from core.models.backbone.transformer import TransformerBackbone
+from core.models.bachbone.transformer import TransformerBackbone
+from core.models.bachbone.lstm import LSTMBackbone
 from core.models.heads.forecasting import ForecastHead
 from core.models.heads.event import EventHead
 from core.models.heads.risk import RiskHead
-
-
-@dataclass
-class ModelConfig:
-    backbone: str = "transformer"  # transformer | lstm
-    d_in: int = 16
-
-    # shared
-    d_model: int = 128
-    n_layers: int = 2
-    dropout: float = 0.1
-    pooling: str = "mean"
-
-    # transformer-only
-    n_heads: int = 4
-    dim_feedforward: int | None = None
-
-    # lstm-only
-    bidirectional: bool = False
-
-    # heads
-    num_event_classes: int = 2
-    use_forecast_head: bool = True
-    use_risk_head: bool = True
-    H: int = 60
-    m: int = 3
-
 
 class MultiTaskModel(nn.Module):
     """Configurable multitask model with optional forecast/risk heads.
