@@ -17,10 +17,9 @@ conda activate tunnelai
 bash scripts/verify_clean_machine.sh
 ```
 
-## Thesis Workflow
-- Experiment matrix: `thesis_experiment_matrix.md` / `thesis_experiment_matrix.csv`
+## Experiment Workflow
+- Default matrix: `configs/experiment_matrix.csv`
 - Automation helper: `python scripts/run_experiment_matrix.py --mode plan`
-- Thesis DoD checklist: `THESIS_DEFINITION_OF_DONE.md`
 - Label quality spec: `LABEL_QUALITY.md`
 - Label quality report: `python scripts/report_label_quality.py --csv data/raw/all_runs.csv --h 60`
 - Model baselines: `MODEL_BASELINES.md`
@@ -70,4 +69,3 @@ git pull
 ## Scope (vereinfacht)
 - Kein separates Backend/Frontend mehr.
 - Fokus nur auf Streamlit-App (`apps/ui/dashboard.py`), KI-Modelle, Parameter, Tags und Auswertungs-Skripte.
-

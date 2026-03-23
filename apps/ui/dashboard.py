@@ -384,7 +384,7 @@ def render_frame(i: int) -> None:
             except Exception as e:
                 ai_area.error(f"AI Prediction Fehler: {e}")
 
-    # Top-Tags by (criticality + limit proximity)
+def _layer_table(model: nn.Module, sample_len: int = 60, d_in: int = 8) -> pd.DataFrame:
     rows = []
     outputs = {}
     hooks = []
