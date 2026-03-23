@@ -88,7 +88,39 @@ if not numeric_cols:
 st.session_state.setdefault("playing", False)
 st.session_state.setdefault("i", 0)
 
-if start_btn:
+# -------------------------
+# Run scenario -> create CSV
+# -------------------------
+if run_btn:
+    scn = load_scenario(scenario_path)
+    setattr(scn, "seed", int(seed))
+    out_csv = make_out_csv_path(scenario_path, int(seed))
+
+    out_csv = record_to_csv(
+        scenario=scn,
+        out_csv=out_csv,
+        start_time_iso=start_time,
+        max_seconds=int(max_seconds) if max_seconds else None,
+    )
+def _extract_block(text: str, header: str) -> str:
+    lines = text.splitlines()
+    out = []
+    capture = False
+    for line in lines:
+        if line.strip() == header.strip():
+            capture = True
+            continue
+        if capture and line.startswith("==="):
+            break
+        if capture:
+            out.append(line)
+    return "\n".join(out).strip()
+
+
+# -------------------------
+# Playback controls
+# -------------------------
+if start_play:
     st.session_state.playing = True
 if pause_btn:
     st.session_state.playing = False
