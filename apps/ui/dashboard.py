@@ -72,13 +72,6 @@ with st.sidebar:
     pause_btn = c2.button("⏸️ Pause", use_container_width=True)
     reset_btn = c3.button("🔄 Reset", use_container_width=True)
 
-# Backward-compatibility flags for older dashboard fragments.
-# Some stale local copies referenced `run_btn`/`start_play`/`pause_play`/`reset_play`.
-run_btn = False
-start_play = start_btn
-pause_play = pause_btn
-reset_play = reset_btn
-
 csv_path = os.path.join(RAW_DIR, selected_csv)
 df = load_csv(csv_path)
 
@@ -95,7 +88,39 @@ if not numeric_cols:
 st.session_state.setdefault("playing", False)
 st.session_state.setdefault("i", 0)
 
-if start_btn:
+# -------------------------
+# Run scenario -> create CSV
+# -------------------------
+if run_btn:
+    scn = load_scenario(scenario_path)
+    setattr(scn, "seed", int(seed))
+    out_csv = make_out_csv_path(scenario_path, int(seed))
+
+    out_csv = record_to_csv(
+        scenario=scn,
+        out_csv=out_csv,
+        start_time_iso=start_time,
+        max_seconds=int(max_seconds) if max_seconds else None,
+    )
+def _extract_block(text: str, header: str) -> str:
+    lines = text.splitlines()
+    out = []
+    capture = False
+    for line in lines:
+        if line.strip() == header.strip():
+            capture = True
+            continue
+        if capture and line.startswith("==="):
+            break
+        if capture:
+            out.append(line)
+    return "\n".join(out).strip()
+
+
+# -------------------------
+# Playback controls
+# -------------------------
+if start_play:
     st.session_state.playing = True
 if pause_btn:
     st.session_state.playing = False
