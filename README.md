@@ -122,7 +122,7 @@ pip install numpy pandas matplotlib streamlit pyyaml torch
 ### Run single scenario
 
 ```bash
-python streaming/run_record.py --scenario scenarios/example.json --out data/raw/output.csv
+python streaming/run_record.py --out data/raw/output.csv
 ```
 
 ### Run batch of scenarios
