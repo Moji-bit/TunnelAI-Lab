@@ -113,17 +113,6 @@ def _list_dirs(folder: str) -> List[str]:
     return dirs
 
 
-def tag_label(tag_id: str, meta: dict) -> str:
-    unit = meta.get("unit")
-    parts = tag_id.split(".")
-    seg = next((p for p in parts if p.startswith("S") and len(p) == 3), "")
-    signal = parts[-1]
-    zone = f"Z{meta.get('zone')}" if meta.get("zone") else parts[0]
-    subsystem = meta.get("subsystem", parts[1] if len(parts) > 1 else "")
-    u = f" [{unit}]" if unit else ""
-    if seg:
-        return f"{zone} | {subsystem} | {seg} | {signal}{u}"
-    return f"{zone} | {subsystem} | {signal}{u}"
 
 
 def limit_status(value: float, meta: dict) -> str:
@@ -350,22 +339,6 @@ def render_frame(i: int) -> None:
     return model
 
 
-    # Status
-    ts = df_wide.index[i]
-    if status_by_ts is not None and ts in status_by_ts.index:
-        scenario_id = status_by_ts.at[ts, "scenario_id"]
-        quality = status_by_ts.at[ts, "quality"]
-    else:
-        scenario_id = "-"
-        quality = "-"
-
-    status_area.markdown(
-        f"""
-        **Timestamp:** `{ts}`
-        **Scenario:** `{scenario_id}`
-        **Quality:** `{quality}`
-        """
-    )
 
     # AI live prediction
     if ai_mode:
