@@ -112,8 +112,8 @@ def build_datasets(rows: list[dict[str, str]], source_csv: str, out_root: str, L
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Plan and pre-build datasets from thesis_experiment_matrix.csv")
-    parser.add_argument("--matrix", default="thesis_experiment_matrix.csv", help="Path to matrix CSV")
+    parser = argparse.ArgumentParser(description="Plan and pre-build datasets from configs/experiment_matrix.csv")
+    parser.add_argument("--matrix", default="configs/experiment_matrix.csv", help="Path to matrix CSV")
     parser.add_argument("--mode", choices=["plan", "build-datasets"], default="plan")
     parser.add_argument("--csv-path", default="data/raw/all_runs.csv", help="Long-format source CSV for dataset build")
     parser.add_argument("--out-root", default="data/processed/experiments", help="Output root for generated NPZ datasets")
