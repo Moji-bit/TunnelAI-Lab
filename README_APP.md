@@ -78,6 +78,22 @@ Outputs:
 - `data/augmented/augmented_tunnels.csv`
 - `data/augmented/augmentation_manifest.json`
 
+
+## Dataset Builder (4-CSV Upload + Augmentation)
+Nach dem Start der Streamlit-App findest du eine zusätzliche Seite **Dataset Builder + Data Augmentation**.
+
+Workflow:
+1. Lade die vier Dateien hoch: `tunnel_config.csv`, `scenario_metadata.csv`, `timeseries.csv`, `ground_truth.csv`.
+2. Prüfe den Schema-/Konsistenzreport.
+3. Konfiguriere Zielanzahl, Noise, Event-Shift, Missing-Rate und Class-Balance.
+4. Klicke **Generate Augmented Dataset**.
+5. Nutze Preview (Original vs. augmentiert) und exportiere:
+   - `augmented_timeseries.csv`
+   - `augmented_ground_truth.csv`
+   - `augmented_scenario_metadata.csv`
+   - `augmented_tunnel_config.csv`
+   - `merged_training_dataset.csv`
+
 ## Troubleshooting (Windows)
 - If you get `bash` not found: use `.bat` scripts from Anaconda Prompt.
 - If `scripts\run_reports_after_batch.bat` is not found, try either:
