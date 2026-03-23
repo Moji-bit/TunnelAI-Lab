@@ -55,6 +55,29 @@ python scripts\run_reports_after_batch.py
 run_reports_after_batch.bat
 ```
 
+## External Sensor Data Augmentation (4-file format)
+
+Wenn du externe Rohdaten in vier CSV-Dateien hast (Labels, Sensors, Tunnel, Scenario-Meta),
+kannst du daraus direkt 10.000 augmentierte Szenarien erzeugen:
+
+```bash
+python scripts/augment_external_scenarios.py \
+  --labels-csv data/external/labels.csv \
+  --sensors-csv data/external/sensors.csv \
+  --tunnel-csv data/external/tunnel.csv \
+  --scenario-csv data/external/scenario.csv \
+  --out-dir data/augmented \
+  --n-scenarios 10000 \
+  --seed 42
+```
+
+Outputs:
+- `data/augmented/augmented_scenarios.csv`
+- `data/augmented/augmented_sensors.csv`
+- `data/augmented/augmented_labels.csv`
+- `data/augmented/augmented_tunnels.csv`
+- `data/augmented/augmentation_manifest.json`
+
 ## Troubleshooting (Windows)
 - If you get `bash` not found: use `.bat` scripts from Anaconda Prompt.
 - If `scripts\run_reports_after_batch.bat` is not found, try either:
