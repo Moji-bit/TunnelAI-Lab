@@ -27,39 +27,7 @@ if __package__ is None or __package__ == "":
 
 from core.streaming.opcua_mock_server import generate_stream
 from core.streaming.recorder import write_long_csv
-from core.sim.event_generator import EVENT_TYPE_TO_CODE, Scenario
-
-EXACT_COLUMNS = [
-    "scenario_id",
-    "timestamp",
-    "speed_kmh",
-    "flow_veh_h",
-    "occupancy_pct",
-    "co_ppm",
-    "no2_ppm",
-    "pm25",
-    "temp_c",
-    "humidity_pct",
-    "visibility_m",
-    "air_velocity",
-    "air_pressure",
-    "fan_stage",
-    "tunnel_length_m",
-    "gradient_pct",
-    "curvature_radius_m",
-    "tubes",
-    "lanes_per_tube",
-    "direction_mode",
-    "aadt",
-    "heavy_vehicle_pct",
-    "speed_limit_kmh",
-    "vent_system",
-    "jet_fan_count",
-    "weather_type",
-    "event_type",
-    "event_type_code",
-    "risk_level",
-]
+from core.sim.event_generator import Scenario
 
 
 def _resolve_path(path: str | None) -> str | None:
@@ -156,7 +124,7 @@ def record_to_exact_csv(
     start_time_iso: str,
     max_seconds: int | None = None,
 ) -> str:
-    """Write ML-first wide CSV (one row per second, no tag pivot)."""
+    """Write an exact/wide CSV with the requested parameter columns."""
     t0 = datetime.fromisoformat(start_time_iso)
     rows: List[Dict[str, object]] = []
 
@@ -166,7 +134,6 @@ def record_to_exact_csv(
         weather_active = bool(tags.get("Z3.EVT.Weather.Active", 0.0) >= 0.5)
 
         event_type = scenario.incident_type if incident_active else "none"
-        event_type_code = int(EVENT_TYPE_TO_CODE.get(event_type, EVENT_TYPE_TO_CODE["none"]))
         speed_kmh = float(tags.get("Z2.TRAF.AGG.S01.Speed_10s", tags.get("Z1.TRAF.DET.S01.Speed", 0.0)))
         flow_veh_h = float(tags.get("Z2.TRAF.AGG.S01.FlowIn_10s", tags.get("Z1.TRAF.DET.S01.FlowIn", 0.0))) * 60.0
         occupancy_pct = float(tags.get("Z1.TRAF.DET.S01.Occ", 0.0))
@@ -183,34 +150,53 @@ def record_to_exact_csv(
 
         rows.append(
             {
-                "scenario_id": str(scenario.scenario_id),
-                "timestamp": snap.timestamp.isoformat(),
-                "speed_kmh": float(speed_kmh),
-                "flow_veh_h": float(flow_veh_h),
-                "occupancy_pct": float(occupancy_pct),
-                "co_ppm": float(co_ppm),
-                "no2_ppm": float(no2_ppm),
-                "pm25": float(pm25),
-                "temp_c": float(temp_c),
-                "humidity_pct": float(max(0.0, min(100.0, humidity_pct))),
-                "visibility_m": float(visibility_m),
-                "air_velocity": float(air_velocity),
-                "air_pressure": float(air_pressure),
-                "fan_stage": int(round(fan_stage)),
                 "tunnel_length_m": float(scenario.tunnel_length_m),
+                "tunnel_width_m": float(scenario.tunnel_width_m),
+                "clearance_height_m": float(scenario.clearance_height_m),
                 "gradient_pct": float(scenario.gradient_pct),
                 "curvature_radius_m": float(scenario.curvature_radius_m),
+                "profile": scenario.profile,
                 "tubes": int(scenario.tubes),
                 "lanes_per_tube": int(scenario.lanes_per_tube),
-                "direction_mode": str(scenario.direction_mode),
+                "direction_mode": scenario.direction_mode,
                 "aadt": float(scenario.aadt),
                 "heavy_vehicle_pct": float(scenario.heavy_vehicle_pct),
                 "speed_limit_kmh": float(scenario.speed_limit_kmh),
-                "vent_system": str(scenario.vent_system),
+                "traffic_volume_pct": float(scenario.traffic_volume_pct),
+                "escape_route_spacing_m": float(scenario.escape_route_spacing_m),
+                "emergency_call_spacing_m": float(scenario.emergency_call_spacing_m),
+                "layby_spacing_m": float(scenario.layby_spacing_m),
+                "vent_system": scenario.vent_system,
                 "jet_fan_count": int(scenario.jet_fan_count),
-                "weather_type": str(scenario.weather_type if weather_active else "clear"),
-                "event_type": str(event_type),
-                "event_type_code": event_type_code,
+                "air_velocity_ms": float(scenario.air_velocity_ms),
+                "volume_flow_m3s": float(scenario.volume_flow_m3s),
+                "altitude_m": float(scenario.altitude_m),
+                "entry_luminance_cd": float(scenario.entry_luminance_cd),
+                "interior_luminance_cd": float(scenario.interior_luminance_cd),
+                "emergency_lighting": int(scenario.emergency_lighting),
+                "weather": scenario.weather_type if weather_active else "clear",
+                "temperature_c": float(scenario.temperature_c),
+                "weather_intensity_pct": float(scenario.weather_intensity_pct if weather_active else 0.0),
+                "wind_speed_ms": float(scenario.wind_speed_ms),
+                "event_fire": int(event_type == "vehicle_fire"),
+                "event_accident": int(event_type == "collision"),
+                "event_ghostdriver": int(event_type == "wrong_way_driver"),
+                "event_standstill": int(event_type == "stalled_vehicle"),
+                "event_breakdown": int(event_type == "stalled_vehicle"),
+                "event_environmental": int(weather_active),
+                "timestamp": snap.timestamp.isoformat(),
+                "speed_kmh": speed_kmh,
+                "flow_veh_h": flow_veh_h,
+                "occupancy_pct": occupancy_pct,
+                "co_ppm": co_ppm,
+                "no2_ppm": no2_ppm,
+                "pm25": pm25,
+                "temp_c": temp_c,
+                "humidity_pct": max(0.0, min(100.0, humidity_pct)),
+                "visibility_m": visibility_m,
+                "air_velocity": air_velocity,
+                "air_pressure": air_pressure,
+                "event_type": event_type,
                 "risk_level": _risk_level(speed_kmh, occupancy_pct, co_ppm, visibility_m, event_type),
             }
         )
@@ -245,6 +231,12 @@ def main():
         help="Optional long-format tag CSV output path (legacy compatibility)",
     )
     p.add_argument(
+        "--exact-out",
+        type=str,
+        default=None,
+        help="Optional output path for exact/wide CSV with fixed parameter columns",
+    )
+    p.add_argument(
         "--start",
         type=str,
         default="2026-01-01T08:00:00+01:00",
@@ -267,18 +259,18 @@ def main():
         start_time_iso=args.start,
         max_seconds=args.max_seconds,
     )
-    long_out_csv = None
-    if args.long_out:
-        long_out_csv = record_to_csv(
+    exact_out_csv = None
+    if args.exact_out:
+        exact_out_csv = record_to_exact_csv(
             scenario=scenario,
-            out_csv=args.long_out,
+            out_csv=args.exact_out,
             start_time_iso=args.start,
             max_seconds=args.max_seconds,
         )
 
-    print("✅ Recorded ML-ready wide CSV to:", out_csv)
-    if long_out_csv:
-        print("✅ Recorded legacy long CSV to:", long_out_csv)
+    print("✅ Recorded stream to:", out_csv)
+    if exact_out_csv:
+        print("✅ Recorded exact CSV to:", exact_out_csv)
     print("Scenario:", scenario.scenario_id, "| duration_s =", scenario.duration_s)
 
 

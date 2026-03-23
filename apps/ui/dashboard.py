@@ -1,11 +1,8 @@
-"""apps/ui/dashboard.py
+"""ui/dashboard.py
 
-Streamlit app for end-to-end AI workflow in TunnelAI-Lab:
-0) Synthetic Data from Real Raw
-1) Dataset Builder
-2) Training
-3) Evaluation
-4) Model Test
+Single-app mode notice.
+
+The interactive workflow has been consolidated into `apps/ai_page.py`.
 """
 
 from __future__ import annotations
@@ -16,23 +13,23 @@ import re
 import shlex
 import subprocess
 import sys
-from datetime import datetime
-from typing import List, Tuple
 
 import streamlit as st
-import pandas as pd
-import numpy as np
+import yaml
 import torch
 import torch.nn as nn
 
-# Ensure repo root import path when launched from nested cwd
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
+from core.streaming.run_record import load_scenario, record_to_csv, record_to_exact_csv
+
 RAW_DIR = os.path.join(REPO_ROOT, "data", "raw")
 PROC_DIR = os.path.join(REPO_ROOT, "data", "processed")
+SCENARIO_DIR = os.path.join(REPO_ROOT, "scenarios")
 ART_DIR = os.path.join(REPO_ROOT, "artifacts")
+DEFAULT_START_TIME = "2026-01-01T08:00:00+01:00"
 
 
 def _run_cmd(cmd: List[str]) -> Tuple[int, str]:
@@ -45,6 +42,59 @@ def _run_cmd(cmd: List[str]) -> Tuple[int, str]:
         encoding="utf-8",
     )
     return proc.returncode, proc.stdout
+
+
+class LSTMClassifier(nn.Module):
+    def __init__(self, d_in: int, d_model: int, n_layers: int, n_classes: int):
+        super().__init__()
+        self.lstm = nn.LSTM(
+            input_size=d_in,
+            hidden_size=d_model,
+            num_layers=n_layers,
+            batch_first=True,
+            dropout=0.1 if n_layers > 1 else 0.0,
+        )
+        self.head = nn.Linear(d_model, n_classes)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        h, _ = self.lstm(x)
+        return self.head(h[:, -1, :])
+
+
+class TransformerClassifier(nn.Module):
+    def __init__(self, d_in: int, d_model: int, n_layers: int, n_heads: int, n_classes: int):
+        super().__init__()
+        self.in_proj = nn.Linear(d_in, d_model)
+        enc_layer = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=n_heads,
+            dim_feedforward=d_model * 4,
+            dropout=0.1,
+            batch_first=True,
+            activation="gelu",
+        )
+        self.encoder = nn.TransformerEncoder(enc_layer, num_layers=n_layers)
+        self.head = nn.Linear(d_model, n_classes)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        z = self.in_proj(x)
+        h = self.encoder(z)
+        return self.head(h[:, -1, :])
+
+
+@st.cache_resource(show_spinner=False)
+def load_ai_model(model_path: str):
+    ckpt = torch.load(model_path, map_location="cpu")
+    backbone = ckpt.get("backbone", "lstm")
+    d_in = int(ckpt.get("d_in", 1))
+    n_classes = int(ckpt.get("n_classes", 2))
+    if backbone == "transformer":
+        model = TransformerClassifier(d_in=d_in, d_model=128, n_layers=2, n_heads=4, n_classes=n_classes)
+    else:
+        model = LSTMClassifier(d_in=d_in, d_model=128, n_layers=2, n_classes=n_classes)
+    model.load_state_dict(ckpt["model_state_dict"])
+    model.eval()
+    return model, ckpt
 
 
 def _list_files(folder: str, suffix: str) -> List[str]:
@@ -63,11 +113,115 @@ def _list_dirs(folder: str) -> List[str]:
     return dirs
 
 
-def _parse_train_log(log_text: str) -> pd.DataFrame:
-    rows = []
-    pat = re.compile(
-        r"^\[epoch\s+(\d+)\]\s+train_loss=([0-9eE\.\-]+)\s+val_loss=([0-9eE\.\-]+)\s+"
-        r"acc=([0-9eE\.\-]+)\s+prec_macro=([0-9eE\.\-]+)\s+rec_macro=([0-9eE\.\-]+)\s+f1_macro=([0-9eE\.\-]+)"
+
+
+def limit_status(value: float, meta: dict) -> str:
+    limits = meta.get("limits")
+    if not limits:
+        return "⚪️"
+
+    vmin = limits.get("min", None)
+    vmax = limits.get("max", None)
+
+    if (vmin is not None and value < vmin) or (vmax is not None and value > vmax):
+        return "🔴"
+
+    band = 0.10
+    if vmin is not None and vmax is not None and vmax > vmin:
+        span = vmax - vmin
+        if value < vmin + band * span or value > vmax - band * span:
+            return "🟡"
+
+    return "🟢"
+
+
+# -------------------------
+# Streamlit UI
+# -------------------------
+st.set_page_config(page_title="TunnelAI-Lab – App", layout="wide")
+st.title("🚇 TunnelAI-Lab – App (Szenario-Runner + Playback)")
+
+with st.sidebar:
+    st.header("⚙️ Szenario ausführen")
+
+    scenarios = list_json_files(SCENARIO_DIR)
+    if not scenarios:
+        st.error(f"Keine Szenario-JSONs gefunden in: {os.path.relpath(SCENARIO_DIR, REPO_ROOT)}")
+        st.stop()
+
+    selected_scn = st.selectbox("Szenario wählen", scenarios, index=0)
+    scenario_path = os.path.join(SCENARIO_DIR, selected_scn)
+
+    start_time = st.text_input("Startzeit (ISO8601)", value=DEFAULT_START)
+    max_seconds = st.number_input(
+        "Max seconds (Playback-Länge)",
+        min_value=10,
+        max_value=24 * 3600,
+        value=DEFAULT_MAX_SECONDS,
+        step=10,
+        help="Für schnelle Tests. Für volle Länge später auf None/leer umstellen.",
+    )
+    seed = st.number_input(
+        "Seed (Reproduzierbarkeit)",
+        min_value=0,
+        max_value=10_000_000,
+        value=42,
+        step=1,
+        help="Gleicher Seed => gleiche CSV. Anderer Seed => neue, aber reproduzierbare Variante.",
+    )
+
+    run_btn = st.button("▶️ Run Scenario → CSV erzeugen", use_container_width=True)
+
+    st.markdown("---")
+    st.header("📂 Playback")
+
+    csv_files = list_csv_files(RAW_DIR)
+    selected_csv = st.selectbox(
+        "CSV wählen (data/raw)",
+        csv_files,
+        index=max(0, len(csv_files) - 1) if csv_files else 0,
+        disabled=(len(csv_files) == 0),
+    )
+
+    play_speed = st.slider("Playback Speed", 1, 20, 6, 1)
+    window = st.slider("Chart-Fenster (letzte N Samples)", 50, 2000, 400, 50)
+
+    c1, c2, c3 = st.columns(3)
+    start_play = c1.button("▶️ Start")
+    pause_play = c2.button("⏸️ Pause")
+    reset_play = c3.button("🔄 Reset")
+
+    st.markdown("---")
+    st.header("🤖 AI Prediction Mode")
+    ai_mode = st.toggle("AI live prediction", value=False)
+    model_path = st.text_input("Model path", value=os.path.join(REPO_ROOT, "artifacts", "best_model.pt"))
+    ai_window = st.number_input("AI window size (L)", min_value=5, max_value=5000, value=60, step=5)
+
+
+# -------------------------
+# Session state init
+# -------------------------
+st.session_state.setdefault("playing", False)
+st.session_state.setdefault("i", 0)
+st.session_state.setdefault("last_csv_path", None)
+st.session_state.setdefault("wide", None)
+st.session_state.setdefault("long", None)
+st.session_state.setdefault("status_by_ts", None)
+
+
+# -------------------------
+# Run scenario -> create CSV
+# -------------------------
+if run_btn:
+    scn = load_scenario(scenario_path)
+    setattr(scn, "seed", int(seed))
+    out_csv = make_out_csv_path(scenario_path, int(seed))
+
+    out_csv = record_to_csv(
+        scenario=scn,
+        out_csv=out_csv,
+        start_time_iso=start_time,
+        max_seconds=int(max_seconds) if max_seconds else None,
     )
     for line in log_text.splitlines():
         m = pat.match(line.strip())
@@ -102,135 +256,74 @@ def _extract_block(text: str, header: str) -> str:
     return "\n".join(out).strip()
 
 
-def _parse_kv_block(text: str) -> dict:
-    out = {}
-    for line in text.splitlines():
-        if "=" not in line:
-            continue
-        k, v = line.split("=", 1)
-        k = k.strip()
-        v = v.strip()
-        try:
-            out[k] = float(v)
-        except ValueError:
-            out[k] = v
-    return out
+    seg_sel = st.multiselect("Segment", segs, default=segs)
+
+    selected_tags = []
+    for t in available_tags:
+        m = tag_idx[t]
+        z_ok = m.get("zone") in zone_sel
+        s_ok = m.get("subsystem") in subs_sel
+        seg = next((p for p in t.split(".") if p.startswith("S") and len(p) == 3), None)
+        seg_ok = (seg in seg_sel) if seg else True
+        if z_ok and s_ok and seg_ok:
+            selected_tags.append(t)
+
+    label_map = {tag_label(t, tag_idx[t]): t for t in selected_tags}
+    shown = st.multiselect(
+        "Signals für Chart",
+        options=list(label_map.keys()),
+        default=list(label_map.keys())[:8],
+    )
+    chart_tags = [label_map[x] for x in shown]
 
 
-def _feature_groups(feature_names: list[str]) -> dict[str, list[str]]:
-    groups = {
-        "traffic features": [],
-        "environment features": [],
-        "ventilation/control features": [],
-        "static tunnel metadata": [],
-    }
-    for f in feature_names:
-        low = str(f).lower()
-        if any(k in low for k in ["flow", "speed", "vehicle", "traffic", "queue", "density", "volume"]):
-            groups["traffic features"].append(f)
-        elif any(k in low for k in ["temp", "humid", "co2", "co", "no2", "pm", "weather", "visibility"]):
-            groups["environment features"].append(f)
-        elif any(k in low for k in ["fan", "vent", "damper", "control", "setpoint", "jet", "power"]):
-            groups["ventilation/control features"].append(f)
-        elif any(k in low for k in ["tunnel", "lane", "length", "slope", "grade", "segment", "portal"]):
-            groups["static tunnel metadata"].append(f)
-    return groups
+# -------------------------
+# Playback controls
+# -------------------------
+if start_play:
+    st.session_state.playing = True
+if pause_play:
+    st.session_state.playing = False
+if reset_play:
+    st.session_state.playing = False
+    st.session_state.i = 0
 
 
-class _LSTMClassifier(nn.Module):
-    def __init__(
-        self,
-        d_in: int,
-        d_model: int,
-        n_layers: int,
-        n_classes: int,
-        dropout: float = 0.1,
-        bidirectional: bool = False,
-        pooling: str = "last",
-    ):
-        super().__init__()
-        hidden_size = d_model // 2 if bidirectional else d_model
-        self.lstm = nn.LSTM(
-            input_size=d_in,
-            hidden_size=hidden_size,
-            num_layers=n_layers,
-            batch_first=True,
-            dropout=dropout if n_layers > 1 else 0.0,
-            bidirectional=bidirectional,
-        )
-        self.pooling = pooling
-        self.head = nn.Linear(d_model, n_classes)
+# -------------------------
+# Main layout
+# -------------------------
+left, right = st.columns([2.2, 1])
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        h, _ = self.lstm(x)
-        if self.pooling == "mean":
-            p = h.mean(dim=1)
-        else:
-            p = h[:, -1, :]
-        return self.head(p)
+with left:
+    st.subheader("📈 Live Charts")
+    chart_area = st.empty()
+    table_area = st.empty()
+
+with right:
+    st.subheader("🧾 Status / Info")
+    status_area = st.empty()
+    ai_area = st.empty()
+    tags_area = st.empty()
+    st.markdown("---")
+    st.write(f"CSV: `{os.path.basename(st.session_state.last_csv_path)}`")
+    st.write(f"Samples: {len(df_wide):,}")
+    st.write(f"Tags: {len(df_wide.columns):,}")
 
 
-class _TransformerClassifier(nn.Module):
-    def __init__(
-        self,
-        d_in: int,
-        d_model: int,
-        n_layers: int,
-        n_heads: int,
-        n_classes: int,
-        dropout: float = 0.1,
-        dim_feedforward: int | None = None,
-        pooling: str = "last",
-    ):
-        super().__init__()
-        self.in_proj = nn.Linear(d_in, d_model)
-        enc_layer = nn.TransformerEncoderLayer(
-            d_model=d_model,
-            nhead=n_heads,
-            dim_feedforward=dim_feedforward if dim_feedforward is not None else (d_model * 4),
-            dropout=dropout,
-            batch_first=True,
-            activation="gelu",
-        )
-        self.encoder = nn.TransformerEncoder(enc_layer, num_layers=n_layers)
-        self.pooling = pooling
-        self.head = nn.Linear(d_model, n_classes)
+def render_frame(i: int) -> None:
+    i = max(0, min(i, len(df_wide) - 1))
+    start_i = max(0, i - window)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        z = self.in_proj(x)
-        h = self.encoder(z)
-        if self.pooling == "mean":
-            p = h.mean(dim=1)
-        else:
-            p = h[:, -1, :]
-        return self.head(p)
+    view = df_wide.iloc[start_i : i + 1].copy()
+    current = df_wide.iloc[i, :]
 
+    # Chart (selected signals)
+    plot_df = view[chart_tags] if chart_tags else view.iloc[:, :8]
+    plot_df = plot_df.apply(pd.to_numeric, errors="coerce")
+    plot_df = plot_df.replace([float("inf"), float("-inf")], pd.NA).dropna(axis=1, how="all")
 
-def _build_model_from_ckpt(ckpt: dict) -> nn.Module | None:
-    if "model_state_dict" not in ckpt:
-        return None
-    backbone = str(ckpt.get("backbone", "lstm")).lower()
-    d_in = int(ckpt.get("d_in", 1))
-    n_classes = int(ckpt.get("n_classes", 2))
-    d_model = int(ckpt.get("d_model", 128))
-    n_layers = int(ckpt.get("n_layers", 2))
-    n_heads = int(ckpt.get("n_heads", 4))
-    dropout = float(ckpt.get("dropout", 0.1))
-    pooling = str(ckpt.get("pooling", "last"))
-    bidirectional = bool(ckpt.get("bidirectional", False))
-    dim_feedforward = ckpt.get("dim_feedforward", None)
-
-    if backbone == "transformer":
-        model = _TransformerClassifier(
-            d_in=d_in,
-            d_model=d_model,
-            n_layers=n_layers,
-            n_heads=n_heads,
-            n_classes=n_classes,
-            dropout=dropout,
-            dim_feedforward=dim_feedforward,
-            pooling=pooling,
-        )
+    if plot_df.empty:
+        chart_area.info("Keine numerischen Werte für die aktuelle Auswahl vorhanden.")
     else:
         model = _LSTMClassifier(
             d_in=d_in,
@@ -245,6 +338,51 @@ def _build_model_from_ckpt(ckpt: dict) -> nn.Module | None:
     model.eval()
     return model
 
+
+
+    # AI live prediction
+    if ai_mode:
+        if not os.path.isfile(model_path):
+            ai_area.warning(f"Model nicht gefunden: {model_path}")
+        else:
+            try:
+                model, ckpt = load_ai_model(model_path)
+                feature_names = [str(x) for x in ckpt.get("feature_names", [])]
+                class_names = [str(x) for x in ckpt.get("event_class_names", [])]
+                if not feature_names:
+                    ai_area.warning("Im Modell keine feature_names gespeichert.")
+                else:
+                    end_i = i + 1
+                    start_ai = max(0, end_i - int(ai_window))
+                    block = df_wide.iloc[start_ai:end_i]
+                    if len(block) < int(ai_window):
+                        ai_area.info(f"AI wartet auf genug Samples ({len(block)}/{int(ai_window)}).")
+                    else:
+                        use_feats = [f for f in feature_names if f in block.columns]
+                        if len(use_feats) != len(feature_names):
+                            missing = sorted(set(feature_names) - set(use_feats))
+                            ai_area.warning(f"Fehlende Feature-Spalten: {missing[:6]}")
+                        if not use_feats:
+                            ai_area.error("Keine passenden Modell-Features in der CSV.")
+                        else:
+                            x_np = block[use_feats].apply(pd.to_numeric, errors="coerce").fillna(0.0).to_numpy(dtype="float32")
+                            if x_np.shape[1] != int(ckpt.get("d_in", x_np.shape[1])):
+                                ai_area.error("Feature-Dimension passt nicht zum Modell.")
+                            else:
+                                x_t = torch.from_numpy(x_np).unsqueeze(0)
+                                with torch.no_grad():
+                                    logits = model(x_t)
+                                    probs = torch.softmax(logits, dim=1).cpu().numpy()[0]
+                                pred_idx = int(probs.argmax())
+                                conf = float(probs[pred_idx])
+                                pred_name = class_names[pred_idx] if pred_idx < len(class_names) else str(pred_idx)
+                                risk_high = pred_name not in {"normal", "none", "0"} and conf >= 0.5
+                                if risk_high:
+                                    ai_area.error(f"⚠️ Predicted Event: **{pred_name}** | Confidence: **{conf:.2%}**")
+                                else:
+                                    ai_area.success(f"Predicted Event: **{pred_name}** | Confidence: **{conf:.2%}**")
+            except Exception as e:
+                ai_area.error(f"AI Prediction Fehler: {e}")
 
 def _layer_table(model: nn.Module, sample_len: int = 60, d_in: int = 8) -> pd.DataFrame:
     rows = []
@@ -292,9 +430,9 @@ def _layer_table(model: nn.Module, sample_len: int = 60, d_in: int = 8) -> pd.Da
     return pd.DataFrame(rows)
 
 
-st.set_page_config(page_title="TunnelAI-Lab – App", layout="wide")
-st.title("🤖 TunnelAI-Lab – App")
-st.caption("Single App: Synthetic Data • Dataset Builder • Training • Evaluation • Model Test")
+st.set_page_config(page_title="TunnelAI-Lab – AI Page", layout="wide")
+st.title("🤖 TunnelAI-Lab – AI Workflow")
+st.caption("Dataset Builder • Training • Evaluation • Model Test")
 
 DEFAULT_ARCH = {
     "backbone": "transformer",
@@ -341,64 +479,95 @@ PRESET_ARCH = {
 }
 
 with st.sidebar:
-    st.header("📁 App Paths")
+    st.header("📁 Paths")
     st.code(f"RAW_DIR = {RAW_DIR}")
     st.code(f"PROC_DIR = {PROC_DIR}")
     st.code(f"ART_DIR = {ART_DIR}")
 
 
 # -----------------------------------------------------------------------------
-# Synthetic Data Generation
+# Scenario Generation
 # -----------------------------------------------------------------------------
-st.header("0) Synthetic Data from Real Raw")
+st.header("0) Scenario Generation")
 with st.container(border=True):
-    st.caption("Create many realistic synthetic CSVs from one real sensor CSV (no predefined scenario JSON needed).")
+    st.caption("Generate many raw scenario CSVs from one base scenario (e.g., 1 real scenario × 1000 seeds).")
 
-    raw_csv_files = _list_files(RAW_DIR, ".csv")
-    default_real_csv = os.path.join(RAW_DIR, raw_csv_files[0]) if raw_csv_files else ""
+    scenario_files = _list_files(SCENARIO_DIR, ".json")
+    if not scenario_files:
+        st.warning(f"No scenario JSON found in: {SCENARIO_DIR}")
+    else:
+        g1, g2, g3 = st.columns(3)
+        base_scenario = g1.selectbox("base scenario", scenario_files, index=0)
+        run_count = g2.number_input("number of runs", min_value=1, max_value=100_000, value=1000, step=1)
+        seed_start = g3.number_input("seed start", min_value=0, max_value=10_000_000, value=42, step=1)
 
-    s1, s2, s3 = st.columns(3)
-    source_real_csv = s1.text_input("source real raw csv", value=default_real_csv)
-    synth_runs = s2.number_input("synthetic runs", min_value=1, max_value=100_000, value=10000, step=1)
-    synth_seed = s3.number_input("seed", min_value=0, max_value=10_000_000, value=42, step=1)
+        g4, g5, g6 = st.columns(3)
+        start_time_iso = g4.text_input("start time (ISO8601)", value=DEFAULT_START_TIME)
+        max_seconds_gen = g5.number_input("max seconds", min_value=10, max_value=24 * 3600, value=600, step=10)
+        use_exact_format = g6.toggle("write exact wide csv format", value=True)
 
-    s4, s5, s6, s7 = st.columns(4)
-    synth_chunk_len = s4.number_input("chunk length (rows)", min_value=20, max_value=100_000, value=600, step=10)
-    synth_noise_std = s5.number_input("noise std", min_value=0.0, max_value=2.0, value=0.05, step=0.01)
-    synth_scale_jitter = s6.number_input("scale jitter", min_value=0.0, max_value=1.0, value=0.10, step=0.01)
-    synth_missing_rate = s7.number_input("missing rate", min_value=0.0, max_value=0.9, value=0.01, step=0.01)
+        out_raw_dir = st.text_input("output dir", value=RAW_DIR, key="scenario_gen_out_dir")
+        manifest_path = st.text_input(
+            "run manifest json",
+            value=os.path.join(ART_DIR, "scenario_generation_last_run.json"),
+            key="scenario_gen_manifest",
+        )
 
-    s8, s9 = st.columns(2)
-    synth_event_rate = s8.number_input("event injection rate", min_value=0.0, max_value=1.0, value=0.35, step=0.01)
-    synth_out_dir = s9.text_input("synthetic output dir", value=os.path.join(RAW_DIR, "synth"))
-    synth_manifest = st.text_input("synthetic manifest json", value=os.path.join(ART_DIR, "synth_generation_manifest.json"))
+        if st.button("🎬 Generate Scenario Batch", use_container_width=True):
+            os.makedirs(out_raw_dir, exist_ok=True)
+            base_path = os.path.join(SCENARIO_DIR, base_scenario)
+            base_name = os.path.splitext(base_scenario)[0]
+            out_files = []
+            progress = st.progress(0.0)
 
-    if st.button("🧬 Generate Synthetic from Real Raw", use_container_width=True):
-        if not source_real_csv or not os.path.isfile(source_real_csv):
-            st.error(f"Source CSV not found: {source_real_csv}")
-        else:
-            cmd = [
-                sys.executable,
-                os.path.join("scripts", "generate_synthetic_from_real.py"),
-                "--input_csv", source_real_csv,
-                "--out_dir", synth_out_dir,
-                "--n_samples", str(int(synth_runs)),
-                "--seed", str(int(synth_seed)),
-                "--chunk_len", str(int(synth_chunk_len)),
-                "--noise_std", str(float(synth_noise_std)),
-                "--scale_jitter", str(float(synth_scale_jitter)),
-                "--missing_rate", str(float(synth_missing_rate)),
-                "--event_injection_rate", str(float(synth_event_rate)),
-                "--manifest", synth_manifest,
-            ]
-            code, out = _run_cmd(cmd)
-            if code == 0:
-                st.success("Synthetic generation finished.")
-            else:
-                st.error("Synthetic generation failed.")
-            with st.expander("Command", expanded=False):
-                st.code(" ".join(shlex.quote(x) for x in cmd))
-            st.code(out)
+            for i in range(int(run_count)):
+                seed_i = int(seed_start) + i
+                scn = load_scenario(base_path)
+                setattr(scn, "seed", seed_i)
+                out_name = f"{base_name}__seed{seed_i:07d}.csv"
+                out_csv = os.path.join(out_raw_dir, out_name)
+                if use_exact_format:
+                    out_path = record_to_exact_csv(
+                        scenario=scn,
+                        out_csv=out_csv,
+                        start_time_iso=start_time_iso,
+                        max_seconds=int(max_seconds_gen),
+                    )
+                else:
+                    out_path = record_to_csv(
+                        scenario=scn,
+                        out_csv=out_csv,
+                        start_time_iso=start_time_iso,
+                        max_seconds=int(max_seconds_gen),
+                    )
+                out_files.append(out_path)
+                if i % max(1, int(run_count) // 100) == 0 or i == int(run_count) - 1:
+                    progress.progress((i + 1) / float(run_count))
+
+            manifest = {
+                "created_at_utc": datetime.utcnow().isoformat(),
+                "base_scenario": base_scenario,
+                "run_count": int(run_count),
+                "seed_start": int(seed_start),
+                "seed_end": int(seed_start) + int(run_count) - 1,
+                "start_time_iso": start_time_iso,
+                "max_seconds": int(max_seconds_gen),
+                "exact_format": bool(use_exact_format),
+                "output_dir": out_raw_dir,
+                "files": out_files,
+            }
+            os.makedirs(os.path.dirname(manifest_path), exist_ok=True)
+            with open(manifest_path, "w", encoding="utf-8") as f:
+                json.dump(manifest, f, indent=2)
+
+            st.success(f"Generated {len(out_files)} scenarios in {out_raw_dir}")
+            st.json(
+                {
+                    "first_file": out_files[0] if out_files else None,
+                    "last_file": out_files[-1] if out_files else None,
+                    "manifest": manifest_path,
+                }
+            )
 
 
 # -----------------------------------------------------------------------------
@@ -845,7 +1014,11 @@ with st.container(border=True):
 st.header("4) Model Test")
 with st.container(border=True):
     model_path = st.text_input("model checkpoint", value=os.path.join(ART_DIR, "best_model.pt"))
-    st.caption("Model test uses internally generated simulation conditions (no scenario JSON required).")
+    scenario_files = _list_files(SCENARIO_DIR, ".json")
+    default_scn = ""
+    scenario_choice = st.selectbox("Scenario JSON (optional)", ["<auto-generate>"] + scenario_files, index=0)
+    if scenario_choice != "<auto-generate>":
+        default_scn = os.path.join(SCENARIO_DIR, scenario_choice)
 
     c1, c2, c3 = st.columns(3)
     max_seconds = c1.number_input("max_seconds", min_value=10, max_value=24 * 3600, value=600, step=10)
@@ -866,6 +1039,8 @@ with st.container(border=True):
             "--stride", str(int(test_stride)),
             "--out-dir", test_out_dir,
         ]
+        if default_scn:
+            cmd.extend(["--scenario", default_scn])
 
         code, out = _run_cmd(cmd)
         if code == 0:
