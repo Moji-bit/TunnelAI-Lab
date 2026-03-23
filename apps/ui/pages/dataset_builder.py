@@ -2,30 +2,22 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 from io import BytesIO
-from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
-# Streamlit executes pages as standalone scripts, so we ensure the local `apps/ui`
-# folder is importable without requiring an installed `apps` package.
-UI_DIR = Path(__file__).resolve().parents[1]
-if str(UI_DIR) not in sys.path:
-    sys.path.insert(0, str(UI_DIR))
-
-from services.augmentation_engine import AugmentationConfig, generate_augmented_dataset
-from services.data_loader import (
+from apps.ui.services.augmentation_engine import AugmentationConfig, generate_augmented_dataset
+from apps.ui.services.data_loader import (
     load_ground_truth,
     load_scenario_metadata,
     load_timeseries,
     load_tunnel_config,
 )
-from services.data_merger import build_merged_dataset
-from services.export_service import export_augmented_files
-from services.scenario_generator import list_presets
-from services.schema_validator import validate_cross_file_consistency, validate_schema
+from apps.ui.services.data_merger import build_merged_dataset
+from apps.ui.services.export_service import export_augmented_files
+from apps.ui.services.scenario_generator import list_presets
+from apps.ui.services.schema_validator import validate_cross_file_consistency, validate_schema
 
 st.set_page_config(page_title="TunnelAI Dataset Builder", layout="wide")
 st.title("🧪 Dataset Builder + Data Augmentation")
