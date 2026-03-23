@@ -1,42 +1,124 @@
 # models/multitask_model.py
+from __future__ import annotations
+
+from dataclasses import dataclass
+
 import torch
 import torch.nn as nn
 
-from models.bachbone.transformer import TransformerBackbone
-from models.bachbone.lstm import LSTMBackbone
-from models.heads.forecasting import ForecastHead
-from models.heads.event import EventHead
-from models.heads.risk import RiskHead
+from core.models.backbone.lstm import LSTMBackbone
+from core.models.backbone.transformer import TransformerBackbone
+from core.models.heads.forecasting import ForecastHead
+from core.models.heads.event import EventHead
+from core.models.heads.risk import RiskHead
+
+
+@dataclass
+class ModelConfig:
+    backbone: str = "transformer"  # transformer | lstm
+    d_in: int = 16
+
+    # shared
+    d_model: int = 128
+    n_layers: int = 2
+    dropout: float = 0.1
+    pooling: str = "mean"
+
+    # transformer-only
+    n_heads: int = 4
+    dim_feedforward: int | None = None
+
+    # lstm-only
+    bidirectional: bool = False
+
+    # heads
+    num_event_classes: int = 2
+    use_forecast_head: bool = True
+    use_risk_head: bool = True
+    H: int = 60
+    m: int = 3
+
 
 class MultiTaskModel(nn.Module):
+    """Configurable multitask model with optional forecast/risk heads.
+
+    Forward output is a dict with keys:
+      - backbone_features
+      - event_logits
+      - forecast (optional)
+      - risk (optional)
+    """
+
     def __init__(
         self,
-        backbone: str,
-        d_in: int,
-        d_model: int,
-        H: int,
-        m: int,
-        n_heads: int = 4,
-        n_layers: int = 3,
-        dropout: float = 0.1,
-        pooling: str = "mean",
+        config: ModelConfig | dict | None = None,
+        **legacy_kwargs,
     ):
         super().__init__()
 
-        if backbone.lower() == "transformer":
-            self.backbone = TransformerBackbone(d_in, d_model, n_heads, n_layers, dropout)
-        elif backbone.lower() == "lstm":
-            self.backbone = LSTMBackbone(d_in, d_model, n_layers=2, dropout=dropout)
+        if config is None:
+            config = ModelConfig(**legacy_kwargs)
+        elif isinstance(config, dict):
+            config = ModelConfig(**config)
+        self.cfg = config
+
+        if self.cfg.backbone.lower() == "transformer":
+            self.backbone = TransformerBackbone(
+                d_in=self.cfg.d_in,
+                d_model=self.cfg.d_model,
+                n_heads=self.cfg.n_heads,
+                n_layers=self.cfg.n_layers,
+                dropout=self.cfg.dropout,
+                dim_feedforward=self.cfg.dim_feedforward,
+            )
+        elif self.cfg.backbone.lower() == "lstm":
+            self.backbone = LSTMBackbone(
+                d_in=self.cfg.d_in,
+                d_model=self.cfg.d_model,
+                n_layers=self.cfg.n_layers,
+                dropout=self.cfg.dropout,
+                bidirectional=self.cfg.bidirectional,
+            )
         else:
             raise ValueError("backbone must be 'transformer' or 'lstm'")
 
-        self.forecast = ForecastHead(d_model, H, m, dropout, pooling)
-        self.event = EventHead(d_model, dropout, pooling)
-        self.risk = RiskHead(d_model, dropout, pooling)
+        self.event = EventHead(
+            d_model=self.cfg.d_model,
+            n_classes=self.cfg.num_event_classes,
+            dropout=self.cfg.dropout,
+            pooling=self.cfg.pooling,
+        )
 
-    def forward(self, x: torch.Tensor):
+        self.forecast = (
+            ForecastHead(
+                d_model=self.cfg.d_model,
+                H=self.cfg.H,
+                m=self.cfg.m,
+                dropout=self.cfg.dropout,
+                pooling=self.cfg.pooling,
+            )
+            if self.cfg.use_forecast_head
+            else None
+        )
+
+        self.risk = (
+            RiskHead(
+                d_model=self.cfg.d_model,
+                dropout=self.cfg.dropout,
+                pooling=self.cfg.pooling,
+            )
+            if self.cfg.use_risk_head
+            else None
+        )
+
+    def forward(self, x: torch.Tensor) -> dict[str, torch.Tensor]:
         h = self.backbone(x)
-        y_f = self.forecast(h)
-        y_e = self.event(h)   # logits
-        y_r = self.risk(h)    # score/logit
-        return y_f, y_e, y_r
+        out: dict[str, torch.Tensor] = {
+            "backbone_features": h,
+            "event_logits": self.event(h),
+        }
+        if self.forecast is not None:
+            out["forecast"] = self.forecast(h)
+        if self.risk is not None:
+            out["risk"] = self.risk(h)
+        return out
