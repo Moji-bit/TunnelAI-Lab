@@ -223,24 +223,6 @@ if run_btn:
         start_time_iso=start_time,
         max_seconds=int(max_seconds) if max_seconds else None,
     )
-    for line in log_text.splitlines():
-        m = pat.match(line.strip())
-        if not m:
-            continue
-        rows.append(
-            {
-                "epoch": int(m.group(1)),
-                "train_loss": float(m.group(2)),
-                "val_loss": float(m.group(3)),
-                "accuracy": float(m.group(4)),
-                "precision_macro": float(m.group(5)),
-                "recall_macro": float(m.group(6)),
-                "f1_macro": float(m.group(7)),
-            }
-        )
-    return pd.DataFrame(rows)
-
-
 def _extract_block(text: str, header: str) -> str:
     lines = text.splitlines()
     out = []
@@ -254,27 +236,6 @@ def _extract_block(text: str, header: str) -> str:
         if capture:
             out.append(line)
     return "\n".join(out).strip()
-
-
-    seg_sel = st.multiselect("Segment", segs, default=segs)
-
-    selected_tags = []
-    for t in available_tags:
-        m = tag_idx[t]
-        z_ok = m.get("zone") in zone_sel
-        s_ok = m.get("subsystem") in subs_sel
-        seg = next((p for p in t.split(".") if p.startswith("S") and len(p) == 3), None)
-        seg_ok = (seg in seg_sel) if seg else True
-        if z_ok and s_ok and seg_ok:
-            selected_tags.append(t)
-
-    label_map = {tag_label(t, tag_idx[t]): t for t in selected_tags}
-    shown = st.multiselect(
-        "Signals für Chart",
-        options=list(label_map.keys()),
-        default=list(label_map.keys())[:8],
-    )
-    chart_tags = [label_map[x] for x in shown]
 
 
 # -------------------------
