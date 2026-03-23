@@ -1,31 +1,20 @@
 """ui/dashboard.py
 
-Streamlit user interface for non-technical exploration of generated tunnel data.
+Single-app mode notice.
 
-Main capabilities:
-1) Run a configured scenario and create a CSV file
-2) Load an existing CSV and replay it like a live stream
-3) Filter/select signals using metadata from tags.yaml
-4) Display status and simple risk-oriented tag ranking
-
-This file intentionally keeps UI logic in one place for readability during thesis work.
+The interactive workflow has been consolidated into `apps/ai_page.py`.
 """
 
 from __future__ import annotations
 
 import os
 import sys
-import time
-from datetime import datetime
-from typing import List, Optional
 
-import pandas as pd
 import streamlit as st
 import yaml
 import torch
 import torch.nn as nn
 
-# ensure repo root is importable when Streamlit launches from nested paths
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
